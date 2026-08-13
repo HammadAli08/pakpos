@@ -10,11 +10,11 @@ from pakpos.database.models.payment import Payment
 from pakpos.database.models.expense import Expense
 from pakpos.database.models.stock_movement import StockMovement, MovementType
 from pakpos.database.models.audit import AuditLog
-from pakpos.database.models.setting import Setting
+from pakpos.database.models.setting import Setting, SettingKey
 
 __all__ = [
     "Category", "Product", "Customer", "Supplier", "User",
     "Sale", "SaleItem", "Purchase", "PurchaseItem",
     "Payment", "Expense", "StockMovement", "MovementType",
-    "AuditLog", "Setting",
+    "AuditLog", "Setting", "SettingKey",
 ]

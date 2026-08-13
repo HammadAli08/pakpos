@@ -55,7 +55,7 @@ def create_all_tables(engine: Engine) -> None:
         sale, purchase, payment, expense,
         stock_movement, user, audit, setting,
     )
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine, checkfirst=True)
     logger.info("All database tables created/verified.")
 
 

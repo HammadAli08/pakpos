@@ -9,6 +9,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from pakpos.database.engine import Base
 
 
+class SettingKey:
+    """Well-known keys for application settings."""
+    SHOP_NAME = "shop_name"
+    SHOP_ADDRESS = "shop_address"
+    SHOP_PHONE = "shop_phone"
+    RECEIPT_PRINTER = "receipt_printer"
+    RECEIPT_FOOTER = "receipt_footer"
+    TAX_NUMBER = "tax_number"
+
+
 class Setting(Base):
     """Key-value store for application settings."""
     __tablename__ = "settings"

@@ -1,0 +1,49 @@
+name: Build Windows Installer (PakPOS)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build & Test Windows Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Install Dependencies
+        run: |
+          uv sync --frozen
+
+      - name: Run Pytest Suite
+        run: |
+          uv run pytest tests/ -v
+
+      - name: Build Executable with PyInstaller
+        run: |
+          uv run pyinstaller pakpos.spec
+
+      - name: Compile Inno Setup Installer
+        uses: MinCiencia/action-innosetup@v1
+        with:
+          issfile: installer/pakpos.iss
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PakPOS-Setup-Windows
+          path: installer_output/PakPOS-Setup.exe

@@ -21,6 +21,7 @@ class TestCustomerKhata:
 
         # 1. Initial balance
         assert sample_customer.current_balance == Decimal("0")
+        sample_product.sale_price = Decimal("250")
 
         # 2. Credit Sale of Rs 500
         sales_service.create_sale(SaleRequest(

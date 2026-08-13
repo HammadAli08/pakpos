@@ -22,10 +22,10 @@ class TestServiceAuthorization:
                 product_name=sample_product.name,
                 barcode=sample_product.barcode,
                 quantity=Decimal("1"),
-                unit_price=Decimal("100"),
+                unit_price=sample_product.sale_price,
             )],
             payment_method=PaymentMethod.CASH,
-            paid_amount=Decimal("100"),
+            paid_amount=sample_product.sale_price,
             cashier_id=cashier_user.id,
         ))
         db_session.commit()
@@ -43,10 +43,10 @@ class TestServiceAuthorization:
                 product_name=sample_product.name,
                 barcode=sample_product.barcode,
                 quantity=Decimal("1"),
-                unit_price=Decimal("100"),
+                unit_price=sample_product.sale_price,
             )],
             payment_method=PaymentMethod.CASH,
-            paid_amount=Decimal("100"),
+            paid_amount=sample_product.sale_price,
             cashier_id=owner_user.id,
         ))
         db_session.commit()

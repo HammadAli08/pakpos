@@ -63,6 +63,7 @@ class PosScreen(QWidget):
 
         self.list_products = QListWidget()
         self.list_products.itemDoubleClicked.connect(self._on_product_double_clicked)
+        self.list_products.itemActivated.connect(self._on_product_double_clicked)
 
         left_layout.addWidget(self.input_barcode)
         left_layout.addWidget(self.list_products)
@@ -79,11 +80,29 @@ class PosScreen(QWidget):
         box_totals.setObjectName("card")
         tot_layout = QVBoxLayout(box_totals)
 
-        lbl_tot_title = QLabel("TOTAL DUE")
+        summary_row = QHBoxLayout()
+        lbl_sub = QLabel("Subtotal:")
+        lbl_sub.setObjectName("label_subtitle")
+        self.lbl_subtotal_amount = QLabel("Rs. 0.00")
+        self.lbl_subtotal_amount.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        lbl_tax = QLabel("Tax:")
+        lbl_tax.setObjectName("label_subtitle")
+        self.lbl_tax_amount = QLabel("Rs. 0.00")
+        self.lbl_tax_amount.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        summary_row.addWidget(lbl_sub)
+        summary_row.addWidget(self.lbl_subtotal_amount)
+        summary_row.addSpacing(20)
+        summary_row.addWidget(lbl_tax)
+        summary_row.addWidget(self.lbl_tax_amount)
+
+        lbl_tot_title = QLabel("GRAND TOTAL DUE")
         lbl_tot_title.setObjectName("label_subtitle")
         self.lbl_total_amount = QLabel("Rs. 0.00")
         self.lbl_total_amount.setObjectName("label_amount")
 
+        tot_layout.addLayout(summary_row)
         tot_layout.addWidget(lbl_tot_title)
         tot_layout.addWidget(self.lbl_total_amount)
 
@@ -119,6 +138,9 @@ class PosScreen(QWidget):
 
         shortcut_f1 = QShortcut(QKeySequence("F1"), self)
         shortcut_f1.activated.connect(self.input_barcode.setFocus)
+
+        shortcut_esc = QShortcut(QKeySequence("Esc"), self)
+        shortcut_esc.activated.connect(self.cart_widget.clear_cart)
 
     def _load_products(self, query: str = "") -> None:
         self.list_products.clear()
@@ -163,7 +185,11 @@ class PosScreen(QWidget):
         self.input_barcode.setFocus()
 
     def _update_totals(self) -> None:
+        subtotal = self.cart_widget.get_subtotal()
+        tax = self.cart_widget.get_tax_total()
         total = self.cart_widget.get_total()
+        self.lbl_subtotal_amount.setText(format_currency(subtotal))
+        self.lbl_tax_amount.setText(format_currency(tax))
         self.lbl_total_amount.setText(format_currency(total))
 
     def _on_checkout(self) -> None:

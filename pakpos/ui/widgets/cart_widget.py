@@ -1,6 +1,6 @@
 """
 CartWidget — Table display for cashier cart items.
-Supports quantity adjustment, row removal, and summary calculation.
+Supports inline quantity adjustment, row removal, and real-time summary calculation.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Callable
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QWidget,
-    QHBoxLayout, QPushButton, QLabel, QVBoxLayout
+    QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QDoubleSpinBox
 )
 
 from pakpos.services.sales_service import CartItem
@@ -19,7 +19,7 @@ from pakpos.utils.formatters import format_currency, format_quantity
 
 class CartWidget(QTableWidget):
     """
-    Cart table displaying items, quantities, unit prices, and totals.
+    Cart table displaying items, interactive quantities, unit prices, and totals.
     """
     cart_updated = Signal()
 
@@ -41,7 +41,7 @@ class CartWidget(QTableWidget):
         self.setAlternatingRowColors(True)
 
     def add_item(self, item: CartItem) -> None:
-        # Check if already in cart
+        """Add item to cart or increment quantity if item with same product_id exists."""
         for existing in self._cart_items:
             if existing.product_id == item.product_id:
                 existing.quantity += item.quantity
@@ -66,6 +66,9 @@ class CartWidget(QTableWidget):
     def get_subtotal(self) -> Decimal:
         return sum(item.subtotal for item in self._cart_items)
 
+    def get_tax_total(self) -> Decimal:
+        return sum(item.tax_amount for item in self._cart_items)
+
     def get_total(self) -> Decimal:
         return sum(item.total for item in self._cart_items)
 
@@ -74,34 +77,59 @@ class CartWidget(QTableWidget):
         for i, item in enumerate(self._cart_items):
             self.insertRow(i)
             
-            # Product Name
-            self.setItem(i, 0, QTableWidgetItem(item.product_name))
+            # Product Name (Read-only)
+            name_item = QTableWidgetItem(item.product_name)
+            name_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.setItem(i, 0, name_item)
             
-            # Price
+            # Price (Read-only — loaded from DB product)
             p_item = QTableWidgetItem(format_currency(item.unit_price))
             p_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.VCenter)
+            p_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.setItem(i, 1, p_item)
 
-            # Qty
-            q_item = QTableWidgetItem(format_quantity(item.quantity))
-            q_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.VCenter)
-            self.setItem(i, 2, q_item)
+            # Qty SpinBox (Editable quantity)
+            spin_qty = QDoubleSpinBox()
+            spin_qty.setRange(0.001, 99999.0)
+            spin_qty.setDecimals(3 if float(item.quantity) != int(float(item.quantity)) else 0)
+            spin_qty.setSingleStep(1.0)
+            spin_qty.setValue(float(item.quantity))
+            spin_qty.setFixedWidth(85)
+            spin_qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            # Discount
+            def _on_qty_changed(val: float, cart_item: CartItem=item, row_idx: int=i) -> None:
+                try:
+                    cart_item.quantity = Decimal(str(val))
+                    t_item = QTableWidgetItem(format_currency(cart_item.total))
+                    t_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.VCenter)
+                    t_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                    self.setItem(row_idx, 4, t_item)
+                    self.cart_updated.emit()
+                except Exception:
+                    pass
+
+            spin_qty.valueChanged.connect(_on_qty_changed)
+            self.setCellWidget(i, 2, spin_qty)
+
+            # Discount (Read-only)
             d_item = QTableWidgetItem(format_currency(item.discount))
             d_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.VCenter)
+            d_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.setItem(i, 3, d_item)
 
-            # Total
+            # Total (Read-only)
             t_item = QTableWidgetItem(format_currency(item.total))
             t_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.VCenter)
+            t_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.setItem(i, 4, t_item)
 
             # Remove Button
             btn_del = QPushButton("X")
             btn_del.setObjectName("btn_danger")
             btn_del.setFixedWidth(28)
+            btn_del.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn_del.clicked.connect(lambda _, idx=i: self.remove_item(idx))
             self.setCellWidget(i, 5, btn_del)
 
         self.cart_updated.emit()
+

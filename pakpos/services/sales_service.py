@@ -24,6 +24,7 @@ from pakpos.database.repositories.customer_repo import CustomerRepository
 from pakpos.hardware.printer.base import ReceiptData
 from pakpos.utils.logger import get_logger
 from pakpos.utils.validators import validate_quantity, validate_price, validate_discount, ValidationError
+from pakpos.utils.formatters import format_quantity
 
 logger = get_logger(__name__)
 
@@ -91,23 +92,48 @@ class SalesService:
     def create_sale(self, request: SaleRequest) -> SaleResult:
         """
         Create a sale atomically.
+        Enforces stock validation before writes and uses authoritative DB prices.
         """
         if not request.items:
             raise ValidationError("items", "Cart cannot be empty")
 
-        # Step 1: Validate all items and collect products
+        # Step 1: Validate all items, check stock, and collect products
         products = {}
-        for item in request.items:
-            product = self._product_repo.get_by_id(item.product_id)
-            if product is None or not product.is_active:
-                raise ValidationError("product", f"Product '{item.product_name}' not found")
-            validate_quantity(item.quantity, "quantity")
-            validate_price(item.unit_price, "unit_price")
-            products[item.product_id] = product
+        requested_stock: dict[int, Decimal] = {}
 
-        # Step 2: Calculate totals
-        subtotal = sum(item.subtotal for item in request.items)
-        item_tax = sum(item.tax_amount for item in request.items)
+        for item in request.items:
+            validate_quantity(item.quantity, "quantity")
+            if item.product_id not in products:
+                product = self._product_repo.get_by_id(item.product_id)
+                if product is None or not product.is_active:
+                    raise ValidationError("product", f"Product '{item.product_name}' not found")
+                products[item.product_id] = product
+                requested_stock[item.product_id] = Decimal("0")
+
+            requested_stock[item.product_id] += item.quantity
+
+        # Stock validation: Ensure requested quantity <= current stock for every product
+        for prod_id, total_requested in requested_stock.items():
+            product = products[prod_id]
+            available = Decimal(str(product.current_stock))
+            if total_requested > available:
+                raise ValidationError(
+                    "stock",
+                    f"Insufficient stock for '{product.name}'. Requested: {format_quantity(total_requested)}, Available: {format_quantity(available)}."
+                )
+
+        # Step 2: Calculate totals using authoritative DB prices
+        subtotal = Decimal("0")
+        item_tax = Decimal("0")
+
+        for item in request.items:
+            product = products[item.product_id]
+            unit_price = Decimal(str(product.sale_price))
+            item_sub = item.quantity * unit_price
+            item_tax_amt = (item_sub - item.discount) * Decimal(str(product.tax_rate or 0)) / Decimal("100")
+            subtotal += item_sub
+            item_tax += item_tax_amt
+
         sale_discount = validate_discount(request.discount, subtotal)
         total = subtotal - sale_discount + item_tax
 
@@ -144,15 +170,19 @@ class SalesService:
 
         for item in request.items:
             product = products[item.product_id]
+            unit_price = Decimal(str(product.sale_price))
+            item_sub = item.quantity * unit_price
+            item_tax_amt = (item_sub - item.discount) * Decimal(str(product.tax_rate or 0)) / Decimal("100")
+            item_total = item_sub - item.discount + item_tax_amt
 
             sale_item = SaleItem(
                 sale_id=sale.id,
                 product_id=item.product_id,
                 quantity=item.quantity,
-                unit_price=item.unit_price,
+                unit_price=unit_price,
                 discount=item.discount,
-                tax=item.tax_amount,
-                total=item.total,
+                tax=item_tax_amt,
+                total=item_total,
                 product_name_snapshot=product.name,
             )
             self._session.add(sale_item)

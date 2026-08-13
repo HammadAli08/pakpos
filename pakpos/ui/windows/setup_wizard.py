@@ -107,28 +107,38 @@ class SetupWizard(QWizard):
 
     def _on_finished(self, result: int) -> None:
         if result == QWizard.DialogCode.Accepted:
-            shop_name = self.field("shop_name")
-            address = self.field("address")
-            phone = self.field("phone")
-            username = self.field("username")
-            fullname = self.field("fullname")
-            password = self.field("password")
+            try:
+                shop_name = self.field("shop_name")
+                address = self.field("address")
+                phone = self.field("phone")
+                username = self.field("username")
+                fullname = self.field("fullname")
+                password = self.field("password")
 
-            with get_session() as session:
-                # Save settings
-                from pakpos.database.models.setting import Setting
-                session.add(Setting(key=SettingKey.SHOP_NAME, value=shop_name))
-                session.add(Setting(key=SettingKey.SHOP_ADDRESS, value=address))
-                session.add(Setting(key=SettingKey.SHOP_PHONE, value=phone))
+                with get_session() as session:
+                    # Save settings
+                    from pakpos.database.models.setting import Setting
+                    session.add(Setting(key=SettingKey.SHOP_NAME, value=shop_name))
+                    session.add(Setting(key=SettingKey.SHOP_ADDRESS, value=address))
+                    session.add(Setting(key=SettingKey.SHOP_PHONE, value=phone))
 
-                # Create owner account
-                auth = AuthService(session)
-                auth.create_user(username, fullname, password, UserRole.OWNER)
+                    # Create owner account
+                    auth = AuthService(session)
+                    auth.create_user(username, fullname, password, UserRole.OWNER)
 
-                session.commit()
-                logger.info("Setup wizard completed successfully.")
+                    session.commit()
+                    logger.info("Setup wizard completed successfully.")
 
-            # Launch Login Window
-            from pakpos.ui.windows.login_window import LoginWindow
-            self.login_window = LoginWindow()
-            self.login_window.show()
+                # Launch Login Window
+                from pakpos.ui.windows.login_window import LoginWindow
+                from PySide6.QtWidgets import QApplication
+
+                app = QApplication.instance()
+                login_window = LoginWindow()
+                if app is not None:
+                    app._main_window = login_window
+                login_window.show()
+            except Exception as e:
+                logger.critical("Error during setup completion: %s", e, exc_info=True)
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.critical(self, "Setup Error", f"Failed to save initial setup: {e}")

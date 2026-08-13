@@ -25,6 +25,7 @@ def validate_price(value: Decimal | float | str, field: str = "price") -> Decima
 
 
 validate_amount = validate_price  # Alias for general monetary amounts
+parse_amount = validate_price  # Alias for parsing decimal amounts
 
 
 def validate_quantity(value: Decimal | float | str, field: str = "quantity") -> Decimal:
@@ -36,6 +37,9 @@ def validate_quantity(value: Decimal | float | str, field: str = "quantity") -> 
     if d <= 0:
         raise ValidationError(field, "Must be greater than zero")
     return d
+
+
+parse_quantity = validate_quantity  # Alias for parsing quantities
 
 
 def validate_discount(discount: Decimal, total: Decimal) -> Decimal:

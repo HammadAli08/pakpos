@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 
 from pakpos.database.engine import get_session
 from pakpos.database.repositories.product_repo import ProductRepository
-from pakpos.database.repositories.base_repo import BaseRepository
+from pakpos.database.repositories.base import BaseRepository
 from pakpos.database.models.category import Category
 from pakpos.ui.dialogs.product_dialog import ProductDialog
 from pakpos.utils.formatters import format_currency, format_quantity

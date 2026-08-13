@@ -27,8 +27,11 @@ def _hash_password(password: str) -> str:
 def _verify_password(password: str, hashed: str) -> bool:
     """Verify a password against its bcrypt hash."""
     try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
-    except Exception:
+        if not password or not hashed:
+            return False
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception as e:
+        logger.error("Bcrypt password verification failed with error: %s", e, exc_info=True)
         return False
 
 
@@ -88,7 +91,7 @@ class AuthService:
             logger.warning("Failed login attempt for user: %s", username)
             return None
         user.last_login = datetime.now(timezone.utc)
-        self._session.flush()
+        self._session.commit()
         logger.info("User logged in: %s", username)
         return user
 

@@ -107,7 +107,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("PakPOS Ready | Local SQLite Database Active (WAL Mode)")
 
     def _on_logout(self) -> None:
-        from pakpos.ui.windows.login_window import LoginWindow
-        self.login_window = LoginWindow()
-        self.login_window.show()
-        self.close()
+        try:
+            from pakpos.ui.windows.login_window import LoginWindow
+            from PySide6.QtWidgets import QApplication
+
+            app = QApplication.instance()
+            login_window = LoginWindow()
+            if app is not None:
+                app._main_window = login_window
+
+            login_window.show()
+            self.close()
+        except Exception as e:
+            logger.critical("Error during logout: %s", e, exc_info=True)
+            QMessageBox.critical(self, "Logout Error", f"Failed to log out: {e}")

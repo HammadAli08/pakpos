@@ -83,20 +83,38 @@ class LoginWindow(QMainWindow):
             QMessageBox.warning(self, "Sign In Failed", "Please enter both username and password.")
             return
 
-        with get_session() as session:
-            auth = AuthService(session)
-            user = auth.authenticate(username, password)
-            if user is None:
-                QMessageBox.critical(
-                    self, "Sign In Failed", "Invalid username or password.\n\nPlease check your credentials."
-                )
-                self.input_password.clear()
-                return
+        try:
+            logger.info("Sign-in attempt initiated for username: %s", username)
+            with get_session() as session:
+                auth = AuthService(session)
+                user = auth.authenticate(username, password)
+                if user is None:
+                    logger.warning("Sign-in failed for username: %s (invalid credentials or inactive)", username)
+                    QMessageBox.critical(
+                        self, "Sign In Failed", "Invalid username or password.\n\nPlease check your credentials."
+                    )
+                    self.input_password.clear()
+                    return
 
-            logger.info("User '%s' logged in successfully.", user.username)
+                logger.info("User '%s' authenticated successfully (role=%s).", user.username, user.role)
 
-            # Open Main Window
+            # Open Main Window and prevent GC of window reference
             from pakpos.ui.windows.main_window import MainWindow
-            self.main_window = MainWindow(current_user=user)
-            self.main_window.show()
+            from PySide6.QtWidgets import QApplication
+
+            app = QApplication.instance()
+            main_window = MainWindow(current_user=user)
+            if app is not None:
+                app._main_window = main_window
+
+            main_window.show()
             self.close()
+
+        except Exception as e:
+            logger.critical("Unexpected error during login for user '%s': %s", username, e, exc_info=True)
+            from pakpos.config.settings import paths
+            QMessageBox.critical(
+                self,
+                "Sign In Error",
+                f"An unexpected error occurred while signing in:\n{e}\n\nPlease check the log file at:\n{paths.logs}"
+            )

@@ -305,10 +305,12 @@ def run_app(argv: list[str]) -> int:
     if first_run:
         from pakpos.ui.windows.setup_wizard import SetupWizard
         window = SetupWizard()
+        app._main_window = window
         window.show()
     else:
         from pakpos.ui.windows.login_window import LoginWindow
         window = LoginWindow()
+        app._main_window = window
         window.show()
 
     logger.info("UI launched (first_run=%s)", first_run)

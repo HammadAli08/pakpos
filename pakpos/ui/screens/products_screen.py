@@ -87,27 +87,33 @@ class ProductsScreen(QWidget):
                 self.table.setCellWidget(i, 7, btn_edit)
 
     def _on_add_product(self) -> None:
-        with get_session() as session:
-            cat_repo = BaseRepository(Category, session)
-            categories = cat_repo.get_all()
+        try:
+            with get_session() as session:
+                cat_repo = BaseRepository(Category, session)
+                categories = cat_repo.get_all()
 
-            dlg = ProductDialog(categories, parent=self)
-            if dlg.exec() == ProductDialog.DialogCode.Accepted:
-                repo = ProductRepository(session)
-                repo.create(**dlg.product_data)
-                session.commit()
-                QMessageBox.information(self, "Success", "Product added successfully!")
-                self._load_products()
+                dlg = ProductDialog(categories, parent=self)
+                if dlg.exec() == ProductDialog.DialogCode.Accepted:
+                    repo = ProductRepository(session)
+                    repo.create(**dlg.product_data)
+                    session.commit()
+                    QMessageBox.information(self, "Success", "Product added successfully!")
+            self._load_products()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to add product:\n{e}")
 
     def _on_edit_product(self, product) -> None:
-        with get_session() as session:
-            cat_repo = BaseRepository(Category, session)
-            categories = cat_repo.get_all()
+        try:
+            with get_session() as session:
+                cat_repo = BaseRepository(Category, session)
+                categories = cat_repo.get_all()
 
-            dlg = ProductDialog(categories, product=product, parent=self)
-            if dlg.exec() == ProductDialog.DialogCode.Accepted:
-                repo = ProductRepository(session)
-                repo.update(product.id, **dlg.product_data)
-                session.commit()
-                QMessageBox.information(self, "Success", "Product updated successfully!")
-                self._load_products()
+                dlg = ProductDialog(categories, product=product, parent=self)
+                if dlg.exec() == ProductDialog.DialogCode.Accepted:
+                    repo = ProductRepository(session)
+                    repo.update(product.id, **dlg.product_data)
+                    session.commit()
+                    QMessageBox.information(self, "Success", "Product updated successfully!")
+            self._load_products()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to update product:\n{e}")

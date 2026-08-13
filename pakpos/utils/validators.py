@@ -28,14 +28,18 @@ validate_amount = validate_price  # Alias for general monetary amounts
 parse_amount = validate_price  # Alias for parsing decimal amounts
 
 
-def validate_quantity(value: Decimal | float | str, field: str = "quantity") -> Decimal:
-    """Quantity must be > 0."""
+def validate_quantity(value: Decimal | float | str, field: str = "quantity", allow_zero: bool = False) -> Decimal:
+    """Quantity must be > 0 (or >= 0 if allow_zero is True)."""
     try:
         d = Decimal(str(value))
     except InvalidOperation:
         raise ValidationError(field, "Must be a valid number")
-    if d <= 0:
-        raise ValidationError(field, "Must be greater than zero")
+    if allow_zero:
+        if d < 0:
+            raise ValidationError(field, "Cannot be negative")
+    else:
+        if d <= 0:
+            raise ValidationError(field, "Must be greater than zero")
     return d
 
 

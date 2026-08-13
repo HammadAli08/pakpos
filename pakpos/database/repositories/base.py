@@ -11,9 +11,16 @@ T = TypeVar("T", bound=Base)
 class BaseRepository(Generic[T]):
     """Generic CRUD repository."""
 
-    def __init__(self, session: Session, model: Type[T]) -> None:
-        self._session = session
-        self._model = model
+    def __init__(self, arg1: Any, arg2: Any) -> None:
+        if isinstance(arg1, Session):
+            self._session = arg1
+            self._model = arg2
+        elif isinstance(arg2, Session):
+            self._session = arg2
+            self._model = arg1
+        else:
+            self._session = arg1
+            self._model = arg2
 
     def get_by_id(self, entity_id: int) -> T | None:
         return self._session.get(self._model, entity_id)
@@ -27,6 +34,21 @@ class BaseRepository(Generic[T]):
     def add(self, entity: T) -> T:
         self._session.add(entity)
         self._session.flush()
+        return entity
+
+    def create(self, **kwargs: Any) -> T:
+        entity = self._model(**kwargs)
+        self._session.add(entity)
+        self._session.flush()
+        return entity
+
+    def update(self, entity_id: int, **kwargs: Any) -> T | None:
+        entity = self.get_by_id(entity_id)
+        if entity:
+            for key, value in kwargs.items():
+                if hasattr(entity, key):
+                    setattr(entity, key, value)
+            self._session.flush()
         return entity
 
     def delete(self, entity: T) -> None:

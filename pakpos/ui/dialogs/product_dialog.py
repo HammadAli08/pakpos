@@ -90,12 +90,12 @@ class ProductDialog(QDialog):
             return
 
         try:
-            purchase_price = parse_amount(self.input_purchase.text())
-            sale_price = parse_amount(self.input_sale.text())
-            stock = parse_quantity(self.input_stock.text())
-            min_stock = parse_quantity(self.input_min_stock.text())
+            purchase_price = parse_amount(self.input_purchase.text(), field="purchase_price")
+            sale_price = parse_amount(self.input_sale.text(), field="sale_price")
+            stock = parse_quantity(self.input_stock.text(), field="stock", allow_zero=True)
+            min_stock = parse_quantity(self.input_min_stock.text(), field="minimum_stock", allow_zero=True)
         except Exception as e:
-            QMessageBox.warning(self, "Validation Error", f"Invalid numeric input: {e}")
+            QMessageBox.warning(self, "Validation Error", f"Invalid input: {e}")
             return
 
         self.product_data = {

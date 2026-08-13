@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pakpos.config.settings import EXPORT_DIR
 from pakpos.hardware.printer.base import PrinterBase, PrintResult, PrintStatus, ReceiptData
 from pakpos.utils.logger import get_logger
 
@@ -21,7 +22,7 @@ class MockPrinterAdapter(PrinterBase):
     """
 
     def __init__(self, output_dir: Path | None = None) -> None:
-        self._output_dir = output_dir or Path("test_output")
+        self._output_dir = output_dir or (EXPORT_DIR / "receipts")
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._last_receipt: str | None = None
 
@@ -67,7 +68,8 @@ class MockPrinterAdapter(PrinterBase):
     def get_last_receipt(self) -> str | None:
         return self._last_receipt
 
-    def _render_receipt(self, r: ReceiptData) -> str:
+    @staticmethod
+    def _render_receipt(r: ReceiptData) -> str:
         width = 40 if r.paper_width_mm <= 58 else 48
         sep = "-" * width
         lines = [

@@ -19,12 +19,27 @@ OutputBaseFilename=PakPOS-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; Elevation is required to write to Program Files.
+; Business data goes to %PROGRAMDATA%\PakPOS (writable by standard users).
+PrivilegesRequired=admin
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[Dirs]
+; Pre-create all mutable data directories under %PROGRAMDATA%\PakPOS.
+; Permissions: users-modify  — standard (non-admin) users can write business data.
+; Flags: uninsneveruninstall — Inno Setup will NEVER remove these directories on
+;        uninstall, preserving the database, backups, logs, config, and exports.
+Name: "{commonappdata}\PakPOS";         Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\PakPOS\data";    Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\PakPOS\backups"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\PakPOS\logs";    Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\PakPOS\config";  Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\PakPOS\exports"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Files]
 Source: "..\dist\PakPOS\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

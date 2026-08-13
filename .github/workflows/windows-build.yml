@@ -37,10 +37,16 @@ jobs:
         run: |
           uv run pyinstaller pakpos.spec
 
+      - name: Install Inno Setup
+        # Chocolatey is pre-installed on all GitHub-hosted Windows runners.
+        # Installing explicitly makes the build deterministic regardless of
+        # what the runner image happens to pre-install in the future.
+        run: choco install innosetup -y
+
       - name: Compile Inno Setup Installer
-        uses: MinCiencia/action-innosetup@v1
-        with:
-          issfile: installer/pakpos.iss
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\pakpos.iss
 
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4

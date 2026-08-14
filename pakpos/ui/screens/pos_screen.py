@@ -302,7 +302,7 @@ class PosScreen(QWidget):
             cust_repo = CustomerRepository(session)
             customers = cust_repo.get_all(active_only=True)
 
-            dlg = PaymentDialog(total, customers, self)
+            dlg = PaymentDialog(total, customers, session=session, parent=self)
             if dlg.exec() == PaymentDialog.DialogCode.Accepted:
                 sales_service = SalesService(session)
                 req = SaleRequest(

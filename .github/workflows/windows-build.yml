@@ -60,7 +60,9 @@ jobs:
           uv run python -c "import PyInstaller; print('PyInstaller:', PyInstaller.__version__)"
 
       - name: Run Pytest Suite
+        shell: powershell
         run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
           uv run pytest tests/ -v
 
       - name: Build Executable with PyInstaller

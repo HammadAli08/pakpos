@@ -5,6 +5,9 @@ Never uses real hardware — MockPrinter and MockBarcodeScanner only.
 """
 from __future__ import annotations
 
+import os
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
 import pytest
 from decimal import Decimal
 from sqlalchemy import create_engine, event

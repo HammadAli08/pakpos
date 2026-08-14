@@ -83,10 +83,10 @@ class MainWindow(QMainWindow):
         self.btn_pos = QPushButton("Checkout (F1)")
         self.btn_pos.clicked.connect(lambda: self._set_active_screen(0))
 
-        self.btn_products = QPushButton("Products & Stock")
+        self.btn_products = QPushButton("Products && Stock")
         self.btn_products.clicked.connect(lambda: self._set_active_screen(1))
 
-        self.btn_reports = QPushButton("Reports & Insights")
+        self.btn_reports = QPushButton("Reports && Insights")
         self.btn_reports.clicked.connect(lambda: self._set_active_screen(2))
 
         self.btn_backup = QPushButton("Backups")

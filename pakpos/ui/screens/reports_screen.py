@@ -35,7 +35,7 @@ class BigStatCard(QFrame):
     def __init__(self, title: str, accent_color: str, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("stat_card")
-        self.setMinimumHeight(110)
+        self.setMinimumHeight(115)
         self.setStyleSheet(f"""
             QFrame#stat_card {{
                 background-color: #1e2128;
@@ -45,22 +45,22 @@ class BigStatCard(QFrame):
                 padding: 12px 16px;
             }}
             QFrame#stat_card:hover {{
-                background-color: #252831;
+                background-color: #242832;
             }}
         """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
 
         self.lbl_title = QLabel(title)
-        self.lbl_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #9ca3af;")
+        self.lbl_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #9ca3af; background: transparent; border: none;")
 
         self.lbl_value = QLabel("Rs. 0")
-        self.lbl_value.setStyleSheet("font-size: 26px; font-weight: 800; color: #ffffff;")
+        self.lbl_value.setStyleSheet("font-size: 26px; font-weight: 800; color: #ffffff; background: transparent; border: none;")
 
         self.lbl_sub = QLabel("")
-        self.lbl_sub.setStyleSheet("font-size: 12px; font-weight: 600; color: #34d399;")
+        self.lbl_sub.setStyleSheet("font-size: 12px; font-weight: 600; color: #34d399; background: transparent; border: none;")
 
         layout.addWidget(self.lbl_title)
         layout.addWidget(self.lbl_value)
@@ -252,6 +252,7 @@ class ReportsScreen(QWidget):
 
     def _create_box(self, title: str, title_color: str) -> QFrame:
         box = QFrame()
+        box.setMinimumHeight(240)
         box.setStyleSheet("""
             QFrame {
                 background-color: #1e2128;
@@ -261,26 +262,33 @@ class ReportsScreen(QWidget):
             }
         """)
         lay = QVBoxLayout(box)
-        lay.setSpacing(10)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(8)
         lbl = QLabel(title)
-        lbl.setStyleSheet(f"font-size: 16px; font-weight: 800; color: {title_color};")
+        lbl.setStyleSheet(f"font-size: 15px; font-weight: 800; color: {title_color}; background: transparent; border: none;")
         lay.addWidget(lbl)
         return box
 
     def _style_list(self, lst: QListWidget) -> None:
-        lst.setMinimumHeight(160)
+        lst.setMinimumHeight(180)
         lst.setStyleSheet("""
             QListWidget {
                 background-color: #16181d;
-                border: 1px solid #2d3139;
+                border: 1px solid #282c34;
                 border-radius: 6px;
-                padding: 6px;
+                padding: 4px;
+                outline: none;
             }
             QListWidget::item {
-                padding: 8px 12px;
+                padding: 10px 12px;
                 border-bottom: 1px solid #22252c;
-                font-size: 14px;
-                color: #ffffff;
+                font-size: 13px;
+                color: #e8eaed;
+                font-weight: 500;
+            }
+            QListWidget::item:hover {
+                background-color: #1e222b;
+                border-radius: 4px;
             }
         """)
 
@@ -359,9 +367,11 @@ class ReportsScreen(QWidget):
                 if p_rev > 0:
                     pct = float(((c_rev - p_rev) / p_rev * 100).quantize(Decimal("0.1")))
                     if pct > 0:
-                        sub_rev = f"پچھلے مقابلے میں +{pct:.0f}%"
+                        sub_rev = f"پچھلے سے +{pct:.0f}% زیادہ ⬆"
+                        self.card_sales.lbl_sub.setStyleSheet("font-size: 12px; font-weight: 600; color: #34d399; background: transparent; border: none;")
                     elif pct < 0:
-                        sub_rev = f"پچھلے مقابلے میں {pct:.0f}%"
+                        sub_rev = f"پچھلے سے {abs(pct):.0f}% کم ⬇"
+                        self.card_sales.lbl_sub.setStyleSheet("font-size: 12px; font-weight: 600; color: #f87171; background: transparent; border: none;")
 
                 self.card_sales.set_values(
                     self.card_sales.lbl_title.text(), format_currency(c_rev), sub_rev

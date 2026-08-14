@@ -70,40 +70,6 @@ class MockPrinterAdapter(PrinterBase):
 
     @staticmethod
     def _render_receipt(r: ReceiptData) -> str:
-        width = 40 if r.paper_width_mm <= 58 else 48
-        sep = "-" * width
-        lines = [
-            r.shop_name.center(width),
-            r.shop_address.center(width),
-            r.shop_phone.center(width),
-            sep,
-            f"Invoice: {r.invoice_number}",
-            f"Date: {r.created_at or datetime.now().strftime('%d-%b-%Y %H:%M')}",
-            f"Cashier: {r.cashier_name}",
-        ]
-        if r.customer_name:
-            lines.append(f"Customer: {r.customer_name}")
-        lines.append(sep)
-        lines.append(f"{'Item':<22}{'Qty':>4}{'Total':>10}")
-        lines.append(sep)
-        for item in r.items:
-            name = str(item.get("name", ""))[:22]
-            qty = str(item.get("qty", ""))
-            total = f"Rs.{item.get('total', 0):,.2f}"
-            lines.append(f"{name:<22}{qty:>4}{total:>10}")
-        lines += [
-            sep,
-            f"{'Subtotal':<30}{f'Rs.{r.subtotal:,.2f}':>10}",
-        ]
-        if r.discount:
-            lines.append(f"{'Discount':<30}{f'-Rs.{r.discount:,.2f}':>10}")
-        if r.tax:
-            lines.append(f"{'Tax':<30}{f'Rs.{r.tax:,.2f}':>10}")
-        lines += [
-            f"{'TOTAL':<30}{f'Rs.{r.total:,.2f}':>10}",
-            f"{'Payment':<30}{r.payment_method:>10}",
-        ]
-        if r.change > 0:
-            lines.append(f"{'Change':<30}{f'Rs.{r.change:,.2f}':>10}")
-        lines += [sep, r.footer_message.center(width), ""]
-        return "\n".join(lines)
+        from pakpos.hardware.printer.renderers.thermal_renderer import ThermalReceiptRenderer
+        return ThermalReceiptRenderer().render_to_text(r)
+

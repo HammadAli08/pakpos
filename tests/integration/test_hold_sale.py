@@ -56,7 +56,7 @@ class TestHoldAndReprint:
         ))
         db_session.commit()
 
-        receipt_data = sales_service.get_receipt_data(result.sale_id)
+        receipt_data = sales_service.get_receipt_data(result.sale_id, is_reprint=True)
         assert receipt_data.invoice_number == result.invoice_number
         assert receipt_data.total == 150.0
         assert len(receipt_data.items) == 1

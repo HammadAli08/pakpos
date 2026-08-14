@@ -48,6 +48,17 @@ a = Analysis(
         'PySide6.QtCharts',
         # Security
         'bcrypt',
+        # ESC/POS Thermal Printing & Barcodes
+        'escpos',
+        'escpos.printer',
+        'escpos.capabilities',
+        'qrcode',
+        'qrcode.image.pil',
+        'reportlab',
+        'reportlab.platypus',
+        'reportlab.lib',
+        'reportlab.lib.pagesizes',
+        'reportlab.lib.colors',
         # Windows printing — dynamically imported in WindowsPrinterAdapter
         'win32print',
         'win32api',
@@ -60,6 +71,7 @@ a = Analysis(
         'alembic.operations.ops',
         'alembic.script',
     ],
+
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

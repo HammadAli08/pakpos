@@ -1,6 +1,6 @@
 """
 Chart Container & QtCharts Builders — Native PySide6 QtCharts rendering components.
-Supports 5 chart types: Area/Line trend, Grouped bar, Horizontal bar, Donut chart x2.
+Supports simple bar chart, horizontal bar chart, area trend, grouped bar, and donut chart.
 Includes built-in empty state overlays and dark professional styling.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ class ChartContainer(QFrame):
 
         # Header Title
         self.lbl_title = QLabel(title)
-        self.lbl_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #e8eaed;")
+        self.lbl_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #e8eaed;")
         main_layout.addWidget(self.lbl_title)
 
         # Stacked layout for chart vs empty state
@@ -66,10 +66,10 @@ class ChartContainer(QFrame):
         empty_layout = QVBoxLayout(self.empty_widget)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.lbl_empty = QLabel("No sales data available for this range.")
-        self.lbl_empty.setStyleSheet("color: #6b7280; font-size: 13px; font-weight: 500;")
-        self.lbl_empty_sub = QLabel("Complete transactions to view performance charts.")
-        self.lbl_empty_sub.setStyleSheet("color: #4b5563; font-size: 11px;")
+        self.lbl_empty = QLabel("ابھی کوئی سیل ریکارڈ نہیں ہوئی")
+        self.lbl_empty.setStyleSheet("color: #9ca3af; font-size: 14px; font-weight: 600;")
+        self.lbl_empty_sub = QLabel("سیل مکمل کرنے پر یہاں چارٹ نظر آئے گا")
+        self.lbl_empty_sub.setStyleSheet("color: #6b7280; font-size: 12px;")
 
         empty_layout.addWidget(self.lbl_empty, 0, Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(self.lbl_empty_sub, 0, Qt.AlignmentFlag.AlignCenter)
@@ -95,10 +95,10 @@ class ChartContainer(QFrame):
 # CHART BUILDERS
 # ─────────────────────────────────────────────────────────────
 
-def build_revenue_trend_chart(
-    chart: QChart, points: list[RevenueTrendPoint]
+def build_simple_bar_chart(
+    chart: QChart, points: list[RevenueTrendPoint], bar_color: str = "#2d6cdf"
 ) -> bool:
-    """Builds an Area/Line Revenue Trend Chart."""
+    """Builds a very simple vertical Bar Chart for daily sales trend."""
     chart.removeAllSeries()
     for axis in chart.axes():
         chart.removeAxis(axis)
@@ -107,48 +107,48 @@ def build_revenue_trend_chart(
     if not points or not has_data:
         return False
 
-    upper_series = QLineSeries()
-    lower_series = QLineSeries()
+    bar_set = QBarSet("سیل")
+    bar_set.setColor(QColor(bar_color))
 
-    max_rev = Decimal("0")
     categories: list[str] = []
+    max_val = Decimal("0")
 
-    for idx, pt in enumerate(points):
-        upper_series.append(idx, float(pt.revenue))
-        lower_series.append(idx, 0)
+    for pt in points:
+        bar_set.append(float(pt.revenue))
         categories.append(pt.label)
-        if pt.revenue > max_rev:
-            max_rev = pt.revenue
+        if pt.revenue > max_val:
+            max_val = pt.revenue
 
-    area_series = QAreaSeries(upper_series, lower_series)
-    area_series._upper = upper_series
-    area_series._lower = lower_series
-    area_series.setPen(QPen(QColor("#2d6cdf"), 2))
-    
-    grad = QBrush(QColor(45, 108, 223, 70))
-    area_series.setBrush(grad)
+    series = QBarSeries()
+    series.append(bar_set)
+    chart.addSeries(series)
 
-    chart.addSeries(area_series)
-
-    # X Axis (Categories or step numbers)
+    # X Axis (Dates or Days)
     axis_x = QBarCategoryAxis()
     axis_x.append(categories)
-    axis_x.setLabelsColor(QColor("#9ca3af"))
+    axis_x.setLabelsColor(QColor("#e8eaed"))
     axis_x.setGridLineColor(QColor("#2d3139"))
     chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
-    area_series.attachAxis(axis_x)
+    series.attachAxis(axis_x)
 
-    # Y Axis (Revenue PKR)
+    # Y Axis (PKR Amount)
     axis_y = QValueAxis()
-    max_val = float(max_rev) * 1.15 if max_rev > 0 else 100
-    axis_y.setRange(0, max_val)
+    max_range = float(max_val) * 1.15 if max_val > 0 else 100
+    axis_y.setRange(0, max_range)
     axis_y.setLabelsColor(QColor("#9ca3af"))
     axis_y.setGridLineColor(QColor("#2d3139"))
     axis_y.setLabelFormat("Rs. %.0f")
     chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
-    area_series.attachAxis(axis_y)
+    series.attachAxis(axis_y)
 
     return True
+
+
+def build_revenue_trend_chart(
+    chart: QChart, points: list[RevenueTrendPoint]
+) -> bool:
+    """Builds a simple vertical bar chart or area chart."""
+    return build_simple_bar_chart(chart, points)
 
 
 def build_revenue_vs_profit_chart(
@@ -219,8 +219,8 @@ def build_top_products_chart(
     if not products or not any(p.units_sold > 0 or p.revenue > 0 for p in products):
         return False
 
-    bar_set = QBarSet("Sales")
-    bar_set.setColor(QColor("#2d6cdf"))
+    bar_set = QBarSet("زیادہ بکنے والی")
+    bar_set.setColor(QColor("#20c997"))
 
     categories: list[str] = []
     max_val = 0.0
@@ -229,7 +229,7 @@ def build_top_products_chart(
     for p in reversed(products):
         val = float(p.revenue if metric == "revenue" else (p.profit if metric == "profit" else p.units_sold))
         bar_set.append(val)
-        categories.append(p.name[:20] + "..." if len(p.name) > 22 else p.name)
+        categories.append(p.name[:22] + "..." if len(p.name) > 25 else p.name)
         if val > max_val:
             max_val = val
 

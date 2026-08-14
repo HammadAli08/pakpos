@@ -315,40 +315,34 @@ class PosScreen(QWidget):
 
                 try:
                     result = sales_service.create_sale(req)
+                    # 1. Transaction Committed First
                     session.commit()
                     app_events.sale_completed.emit(result.sale_id)
 
-                    # Print Receipt
-                    receipt = ReceiptData(
-                        shop_name="PakPOS Retail",
-                        shop_address="Main Bazar, Lahore",
-                        shop_phone="0300-1234567",
-                        invoice_number=result.invoice_number,
-                        cashier_name=self.current_user.username if self.current_user else "Cashier",
-                        items=[{"name": i.product_name, "qty": float(i.quantity), "unit_price": float(i.unit_price), "total": float(i.total)} for i in items],
-                        subtotal=float(self.cart_widget.get_subtotal()),
-                        discount=0.0,
-                        tax=0.0,
-                        total=float(result.total),
-                        paid_amount=float(result.paid_amount),
-                        change=float(result.change),
-                        payment_method=dlg.payment_method,
-                        customer_name=None,
-                        footer_message="Thank you for shopping with us!",
-                    )
-                    self.printer.print_receipt(receipt)
+                    # 2. Separate Session for Printing & Receipt Generation
+                    with get_session() as print_session:
+                        from pakpos.services.print_service import PrintService
+                        from pakpos.ui.dialogs.print_failure_dialog import PrintFailureDialog
 
-                    # Sale Completed Confirmation Dialog
-                    QMessageBox.information(
-                        self,
-                        "Sale Completed",
-                        f"Invoice #{result.invoice_number} saved successfully!\n\n"
-                        f"Total Amount: {format_currency(result.total)}\n"
-                        f"Paid Amount:  {format_currency(result.paid_amount)}\n"
-                        f"Change Due:   {format_currency(result.change)}"
-                    )
+                        print_svc = PrintService()
+                        print_res = print_svc.print_sale(result.sale_id, session=print_session)
 
-                    # Reset workflow for next customer
+                        if not print_res.success:
+                            sales_svc = SalesService(print_session)
+                            r_data = sales_svc.get_receipt_data(result.sale_id)
+                            dlg_fail = PrintFailureDialog(r_data, error_message=print_res.error or print_res.message, parent=self)
+                            dlg_fail.exec()
+                        else:
+                            QMessageBox.information(
+                                self,
+                                "Sale Completed",
+                                f"Invoice #{result.invoice_number} saved & printed successfully!\n\n"
+                                f"Total Amount: {format_currency(result.total)}\n"
+                                f"Paid Amount:  {format_currency(result.paid_amount)}\n"
+                                f"Change Due:   {format_currency(result.change)}"
+                            )
+
+                    # 3. Reset workflow for next customer
                     self.cart_widget.clear_cart()
                     self.input_barcode.clear()
                     self._load_products()
@@ -358,3 +352,4 @@ class PosScreen(QWidget):
                     session.rollback()
                     logger.error("Checkout failed: %s", e, exc_info=True)
                     QMessageBox.critical(self, "Sale Error", f"Failed to complete sale: {e}")
+

@@ -1,139 +1,145 @@
 """
-ReportsScreen — Professional Offline Retail Business Analytics & Insights Dashboard.
-Displays multi-level hierarchy: KPIs, Trends, Product/Category Performance, Inventory Health,
-Payment Breakdown, and Deterministic Business Insights.
-
-Two-phase initialization:
-  Phase 1 (_setup_ui)       — pure QWidget skeleton, no QChart objects. Safe at construction time.
-  Phase 2 (_setup_charts)   — builds all ChartContainer / QChart objects after the Qt event loop
-                               is running (triggered via QTimer.singleShot(0, ...)).
+ReportsScreen — Ultra-Simple Urdu Business Dashboard for Pakistani Shopkeepers.
+Designed for instant 5-second readability without charts or technical jargon.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime, timezone
+from decimal import Decimal
 
-from PySide6.QtCore import Qt, QTimer, QDate
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QPushButton, QComboBox, QDateEdit, QScrollArea, QGridLayout,
-    QListWidget, QListWidgetItem, QSizePolicy
+    QPushButton, QScrollArea, QGridLayout, QListWidget,
+    QListWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView
 )
 
 from pakpos.database.engine import get_session
 from pakpos.analytics.analytics_service import AnalyticsService
 from pakpos.analytics.metrics import DateRangeOption
-from pakpos.ui.widgets.kpi_card import KPICardWidget
 from pakpos.events import app_events
-from pakpos.utils.formatters import format_currency
+from pakpos.utils.formatters import format_currency, format_quantity
 from pakpos.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+class BigStatCard(QFrame):
+    """Clean summary card with large readable Urdu title and prominent PKR amount."""
 
-def _make_card(padding: int = 14) -> QFrame:
-    card = QFrame()
-    card.setObjectName("card")
-    card.setStyleSheet(f"""
-        QFrame#card {{
-            background-color: #22252c;
-            border: 1px solid #2d3139;
-            border-radius: 10px;
-            padding: {padding}px;
-        }}
-    """)
-    return card
+    def __init__(self, title: str, accent_color: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("stat_card")
+        self.setMinimumHeight(110)
+        self.setStyleSheet(f"""
+            QFrame#stat_card {{
+                background-color: #1e2128;
+                border: 1px solid #2d3139;
+                border-top: 4px solid {accent_color};
+                border-radius: 8px;
+                padding: 12px 16px;
+            }}
+            QFrame#stat_card:hover {{
+                background-color: #252831;
+            }}
+        """)
 
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(6)
 
-# ── screen ───────────────────────────────────────────────────────────────────
+        self.lbl_title = QLabel(title)
+        self.lbl_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #9ca3af;")
+
+        self.lbl_value = QLabel("Rs. 0")
+        self.lbl_value.setStyleSheet("font-size: 26px; font-weight: 800; color: #ffffff;")
+
+        self.lbl_sub = QLabel("")
+        self.lbl_sub.setStyleSheet("font-size: 12px; font-weight: 600; color: #34d399;")
+
+        layout.addWidget(self.lbl_title)
+        layout.addWidget(self.lbl_value)
+        layout.addWidget(self.lbl_sub)
+
+    def set_values(self, title: str, value: str, sub: str = "") -> None:
+        self.lbl_title.setText(title)
+        self.lbl_value.setText(value)
+        self.lbl_sub.setText(sub)
+
 
 class ReportsScreen(QWidget):
     """
-    Main Analytics & Retail Management Dashboard Screen.
-
-    QChart objects are intentionally NOT created in __init__ / _setup_ui.
-    They are created in _setup_charts(), which fires after the Qt event loop
-    starts, preventing the SIGSEGV (exit 139) that occurs when QChart is
-    instantiated before the platform plugin is fully initialised.
+    Ultra-Simple Urdu Dashboard.
+    Single clean vertical flow:
+    1. 4 Primary Stat Cards (Sales, Profit, Expenses, Bills)
+    2. Low Stock Alerts List (کم اسٹاک)
+    3. Customer Udhaar List (ادھار)
+    4. Top Selling Products (زیادہ بکنے والی چیزیں)
+    5. Recent Sales Table (حالیہ رسیدیں & Reprint)
     """
 
     def __init__(self, current_user, parent=None) -> None:
         super().__init__(parent)
         self.current_user = current_user
+        self.selected_range = DateRangeOption.TODAY
 
-        # Chart containers — populated in Phase 2
-        self.chart_revenue_trend = None
-        self.chart_rev_vs_profit = None
-        self.chart_top_products = None
-        self.chart_category = None
-        self.chart_payments = None
-        self._charts_ready = False
-
-        # Phase 1: build everything except QChart objects
         self._setup_ui()
         self._wire_events()
-
-        # Phase 2: build QChart objects + first data load (after event loop starts)
-        QTimer.singleShot(0, self._setup_charts_and_load)
-
-    # ── Phase 1 ──────────────────────────────────────────────────────────────
+        QTimer.singleShot(50, self._load_reports)
 
     def _setup_ui(self) -> None:
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # ─── TOP HEADER BAR ───
+        # ─── HEADER BAR ───
         header_frame = QFrame()
-        header_frame.setObjectName("card")
         header_frame.setStyleSheet("""
-            QFrame#card {
-                background-color: #141619;
-                border-bottom: 1px solid #2d3139;
-                border-radius: 0px;
-                padding: 10px 18px;
-            }
+            background-color: #141619;
+            border-bottom: 1px solid #2d3139;
+            padding: 12px 20px;
         """)
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(16, 10, 16, 10)
+        header_layout.setContentsMargins(16, 8, 16, 8)
 
-        lbl_title = QLabel("Reports & Business Insights")
-        lbl_title.setStyleSheet("font-size: 20px; font-weight: 800; color: #f3f4f6;")
+        lbl_title = QLabel("آج کا حساب")
+        lbl_title.setStyleSheet("font-size: 24px; font-weight: 800; color: #ffffff;")
 
         controls_layout = QHBoxLayout()
         controls_layout.setSpacing(8)
 
-        lbl_range = QLabel("Filter:")
-        lbl_range.setStyleSheet("color: #9ca3af; font-size: 12px; font-weight: 600;")
+        self.btn_today = QPushButton("آج")
+        self.btn_7days = QPushButton("7 دن")
+        self.btn_30days = QPushButton("30 دن")
 
-        self.combo_range = QComboBox()
-        self.combo_range.addItems([
-            "Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Custom Range"
-        ])
-        self.combo_range.currentIndexChanged.connect(self._on_range_changed)
+        for btn in (self.btn_today, self.btn_7days, self.btn_30days):
+            btn.setFixedWidth(80)
+            btn.setFixedHeight(36)
 
-        self.date_start = QDateEdit(QDate.currentDate())
-        self.date_start.setCalendarPopup(True)
-        self.date_start.setDisplayFormat("dd-MMM-yyyy")
-        self.date_start.setVisible(False)
-        self.date_start.dateChanged.connect(self._load_reports)
+        self.btn_today.clicked.connect(lambda: self._set_period(DateRangeOption.TODAY))
+        self.btn_7days.clicked.connect(lambda: self._set_period(DateRangeOption.LAST_7_DAYS))
+        self.btn_30days.clicked.connect(lambda: self._set_period(DateRangeOption.LAST_30_DAYS))
 
-        self.date_end = QDateEdit(QDate.currentDate())
-        self.date_end.setCalendarPopup(True)
-        self.date_end.setDisplayFormat("dd-MMM-yyyy")
-        self.date_end.setVisible(False)
-        self.date_end.dateChanged.connect(self._load_reports)
+        btn_refresh = QPushButton("تازہ کریں")
+        btn_refresh.setFixedWidth(100)
+        btn_refresh.setFixedHeight(36)
+        btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #2d6cdf;
+                color: white;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2457c1;
+            }
+        """)
+        btn_refresh.clicked.connect(self.refresh)
 
-        btn_refresh = QPushButton("Refresh")
-        btn_refresh.setObjectName("btn_secondary")
-        btn_refresh.setFixedWidth(90)
-        btn_refresh.clicked.connect(self._load_reports)
-
-        controls_layout.addWidget(lbl_range)
-        controls_layout.addWidget(self.combo_range)
-        controls_layout.addWidget(self.date_start)
-        controls_layout.addWidget(self.date_end)
+        controls_layout.addWidget(self.btn_today)
+        controls_layout.addWidget(self.btn_7days)
+        controls_layout.addWidget(self.btn_30days)
+        controls_layout.addSpacing(10)
         controls_layout.addWidget(btn_refresh)
 
         header_layout.addWidget(lbl_title)
@@ -141,196 +147,186 @@ class ReportsScreen(QWidget):
         header_layout.addLayout(controls_layout)
         main_layout.addWidget(header_frame)
 
-        # Error banner (hidden by default)
-        self.lbl_error_banner = QLabel("")
-        self.lbl_error_banner.setStyleSheet("""
-            background-color: rgba(220, 53, 69, 0.15);
-            color: #f87171;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 6px 16px;
-            border-bottom: 1px solid #dc3545;
-        """)
-        self.lbl_error_banner.setVisible(False)
-        main_layout.addWidget(self.lbl_error_banner)
+        self._style_buttons()
 
         # ─── SCROLLABLE CONTENT ───
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background-color: #1a1d23; }")
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: #16181d; }")
 
-        content_widget = QWidget()
-        self._content_layout = QVBoxLayout(content_widget)
-        self._content_layout.setContentsMargins(18, 16, 18, 16)
-        self._content_layout.setSpacing(16)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
 
-        # ── KPI Cards (no charts — safe) ──
-        kpi_grid = QGridLayout()
-        kpi_grid.setSpacing(12)
-        self.kpi_cards: list[KPICardWidget] = [KPICardWidget() for _ in range(6)]
-        for col, card in enumerate(self.kpi_cards[:3]):
-            kpi_grid.addWidget(card, 0, col)
-        for col, card in enumerate(self.kpi_cards[3:]):
-            kpi_grid.addWidget(card, 1, col)
-        self._content_layout.addLayout(kpi_grid)
+        # 1. TOP STAT CARDS (4 CARDS GRID)
+        cards_grid = QGridLayout()
+        cards_grid.setSpacing(14)
 
-        # ── Placeholder rows — charts inserted here in Phase 2 ──
-        self._trend_row = QHBoxLayout()
-        self._trend_row.setSpacing(12)
-        self._content_layout.addLayout(self._trend_row)
+        self.card_sales = BigStatCard("کل سیل", "#2d6cdf")
+        self.card_profit = BigStatCard("کل منافع", "#20c997")
+        self.card_expenses = BigStatCard("کل خرچہ", "#d97706")
+        self.card_bills = BigStatCard("کل بل", "#6f42c1")
 
-        self._perf_row = QHBoxLayout()
-        self._perf_row.setSpacing(12)
-        self._content_layout.addLayout(self._perf_row)
+        cards_grid.addWidget(self.card_sales, 0, 0)
+        cards_grid.addWidget(self.card_profit, 0, 1)
+        cards_grid.addWidget(self.card_expenses, 0, 2)
+        cards_grid.addWidget(self.card_bills, 0, 3)
 
-        # ── Inventory Health (no charts) ──
-        self._level4_row = QHBoxLayout()
-        self._level4_row.setSpacing(12)
+        layout.addLayout(cards_grid)
 
-        card_inv = _make_card()
-        inv_layout = QVBoxLayout(card_inv)
-        inv_layout.setSpacing(8)
+        # 2. TWO-COLUMN GRID FOR LISTS (Low Stock + Udhaar)
+        row_lists = QHBoxLayout()
+        row_lists.setSpacing(16)
 
-        lbl_inv_title = QLabel("INVENTORY HEALTH & VALUATION")
-        lbl_inv_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #e8eaed;")
-        inv_layout.addWidget(lbl_inv_title)
+        # Low Stock Box
+        box_stock = self._create_box("کم اسٹاک (اسٹاک کی حالت)", "#f87171")
+        self.list_stock = QListWidget()
+        self._style_list(self.list_stock)
+        box_stock.layout().addWidget(self.list_stock)
+        row_lists.addWidget(box_stock, 1)
 
-        inv_grid = QGridLayout()
-        inv_grid.setSpacing(10)
+        # Udhaar Box
+        box_udhaar = self._create_box("ادھار (گاہکوں کے بقایا جات)", "#fbbf24")
+        self.list_udhaar = QListWidget()
+        self._style_list(self.list_udhaar)
+        box_udhaar.layout().addWidget(self.list_udhaar)
+        row_lists.addWidget(box_udhaar, 1)
 
-        self.lbl_inv_total   = QLabel("Total Products: 0")
-        self.lbl_inv_healthy = QLabel("Healthy Stock: 0")
-        self.lbl_inv_low     = QLabel("Low Stock: 0")
-        self.lbl_inv_out     = QLabel("Out of Stock: 0")
-        self.lbl_inv_cost    = QLabel("Inventory Cost: Rs. 0")
-        self.lbl_inv_retail  = QLabel("Retail Value: Rs. 0")
-        self.lbl_inv_margin  = QLabel("Potential Profit: Rs. 0")
+        layout.addLayout(row_lists)
 
-        self.lbl_inv_healthy.setStyleSheet("color: #34d399; font-weight: 600;")
-        self.lbl_inv_low.setStyleSheet("color: #fbbf24; font-weight: 600;")
-        self.lbl_inv_out.setStyleSheet("color: #f87171; font-weight: 600;")
-        self.lbl_inv_cost.setStyleSheet("color: #9ca3af;")
-        self.lbl_inv_retail.setStyleSheet("color: #e8eaed; font-weight: 600;")
-        self.lbl_inv_margin.setStyleSheet("color: #20c997; font-weight: 700;")
+        # 3. TWO-COLUMN GRID FOR Top Products & Expenses
+        row_info = QHBoxLayout()
+        row_info.setSpacing(16)
 
-        inv_grid.addWidget(self.lbl_inv_total,   0, 0)
-        inv_grid.addWidget(self.lbl_inv_cost,    0, 1)
-        inv_grid.addWidget(self.lbl_inv_healthy, 1, 0)
-        inv_grid.addWidget(self.lbl_inv_retail,  1, 1)
-        inv_grid.addWidget(self.lbl_inv_low,     2, 0)
-        inv_grid.addWidget(self.lbl_inv_margin,  2, 1)
-        inv_grid.addWidget(self.lbl_inv_out,     3, 0)
-        inv_layout.addLayout(inv_grid)
+        # Top Selling Products Box
+        box_top = self._create_box("زیادہ بکنے والی چیزیں", "#20c997")
+        self.list_top = QListWidget()
+        self._style_list(self.list_top)
+        box_top.layout().addWidget(self.list_top)
+        row_info.addWidget(box_top, 1)
 
-        # Payment chart placeholder — filled in Phase 2
-        self._payment_placeholder = QFrame()
-        self._payment_placeholder.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        # Expenses Breakdown Box
+        box_exp = self._create_box("خرچوں کی تفصیل", "#d97706")
+        self.list_exp = QListWidget()
+        self._style_list(self.list_exp)
+        box_exp.layout().addWidget(self.list_exp)
+        row_info.addWidget(box_exp, 1)
 
-        self._level4_row.addWidget(card_inv, 1)
-        self._level4_row.addWidget(self._payment_placeholder, 1)
-        self._content_layout.addLayout(self._level4_row)
+        layout.addLayout(row_info)
 
-        # ── Insights List (no charts) ──
-        bottom_row = QHBoxLayout()
-        bottom_row.setSpacing(12)
-
-        card_insights = _make_card()
-        ins_layout = QVBoxLayout(card_insights)
-
-        lbl_ins_title = QLabel("AUTOMATED BUSINESS INSIGHTS")
-        lbl_ins_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #e8eaed;")
-        ins_layout.addWidget(lbl_ins_title)
-
-        self.list_insights = QListWidget()
-        self.list_insights.setStyleSheet("""
-            QListWidget {
+        # 4. RECENT SALES TABLE (حالیہ رسیدیں)
+        box_recent = self._create_box("حالیہ رسیدیں (پرنٹ کریں)", "#ffffff")
+        self.tbl_sales = QTableWidget()
+        self.tbl_sales.setColumnCount(5)
+        self.tbl_sales.setHorizontalHeaderLabels(["انواائس #", "وقت", "گاہک", "رقم", "پرنٹ"])
+        self.tbl_sales.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tbl_sales.setMinimumHeight(240)
+        self.tbl_sales.setStyleSheet("""
+            QTableWidget {
                 background-color: #1e2128;
                 border: 1px solid #2d3139;
                 border-radius: 6px;
-                padding: 4px;
+                color: #ffffff;
+                font-size: 13px;
+                gridline-color: #282c34;
+            }
+            QHeaderView::section {
+                background-color: #141619;
+                color: #9ca3af;
+                font-weight: bold;
+                padding: 8px;
+                border: 1px solid #2d3139;
+            }
+        """)
+        box_recent.layout().addWidget(self.tbl_sales)
+        layout.addWidget(box_recent)
+
+        scroll.setWidget(content)
+        main_layout.addWidget(scroll, 1)
+
+    def _create_box(self, title: str, title_color: str) -> QFrame:
+        box = QFrame()
+        box.setStyleSheet("""
+            QFrame {
+                background-color: #1e2128;
+                border: 1px solid #2d3139;
+                border-radius: 8px;
+                padding: 12px;
+            }
+        """)
+        lay = QVBoxLayout(box)
+        lay.setSpacing(10)
+        lbl = QLabel(title)
+        lbl.setStyleSheet(f"font-size: 16px; font-weight: 800; color: {title_color};")
+        lay.addWidget(lbl)
+        return box
+
+    def _style_list(self, lst: QListWidget) -> None:
+        lst.setMinimumHeight(160)
+        lst.setStyleSheet("""
+            QListWidget {
+                background-color: #16181d;
+                border: 1px solid #2d3139;
+                border-radius: 6px;
+                padding: 6px;
             }
             QListWidget::item {
                 padding: 8px 12px;
-                border-bottom: 1px solid #282c34;
+                border-bottom: 1px solid #22252c;
+                font-size: 14px;
+                color: #ffffff;
             }
         """)
-        ins_layout.addWidget(self.list_insights)
-        bottom_row.addWidget(card_insights, 1)
-        self._content_layout.addLayout(bottom_row)
 
-        scroll.setWidget(content_widget)
-        main_layout.addWidget(scroll, 1)
-
-    # ── Phase 2 ──────────────────────────────────────────────────────────────
-
-    def _setup_charts_and_load(self) -> None:
+    def _style_buttons(self) -> None:
+        active = """
+            QPushButton {
+                background-color: #2d6cdf;
+                color: white;
+                font-weight: 800;
+                border-radius: 5px;
+                border: none;
+            }
         """
-        Create QChart / ChartContainer objects — must run AFTER the event loop starts.
-        Called exactly once via QTimer.singleShot(0, ...).
+        inactive = """
+            QPushButton {
+                background-color: #1e2128;
+                color: #9ca3af;
+                font-weight: 600;
+                border-radius: 5px;
+                border: 1px solid #2d3139;
+            }
+            QPushButton:hover {
+                background-color: #282c34;
+                color: white;
+            }
         """
-        try:
-            from pakpos.ui.widgets.chart_widget import (
-                ChartContainer,
-                build_revenue_trend_chart, build_revenue_vs_profit_chart,
-                build_top_products_chart, build_donut_chart,
-            )
-            self._build_revenue_trend_chart = build_revenue_trend_chart
-            self._build_revenue_vs_profit_chart = build_revenue_vs_profit_chart
-            self._build_top_products_chart = build_top_products_chart
-            self._build_donut_chart = build_donut_chart
+        self.btn_today.setStyleSheet(active if self.selected_range == DateRangeOption.TODAY else inactive)
+        self.btn_7days.setStyleSheet(active if self.selected_range == DateRangeOption.LAST_7_DAYS else inactive)
+        self.btn_30days.setStyleSheet(active if self.selected_range == DateRangeOption.LAST_30_DAYS else inactive)
 
-            # ── Trend row ──
-            self.chart_revenue_trend = ChartContainer("REVENUE TREND")
-            self.chart_rev_vs_profit = ChartContainer("REVENUE VS GROSS PROFIT")
-            self._trend_row.addWidget(self.chart_revenue_trend, 2)
-            self._trend_row.addWidget(self.chart_rev_vs_profit, 1)
+    def _set_period(self, option: DateRangeOption) -> None:
+        self.selected_range = option
+        self._style_buttons()
 
-            # ── Products / Category row ──
-            self.chart_top_products = ChartContainer("TOP SELLING PRODUCTS")
+        if option == DateRangeOption.TODAY:
+            title_prefix = "آج کا"
+        elif option == DateRangeOption.LAST_7_DAYS:
+            title_prefix = "7 دن کا"
+        else:
+            title_prefix = "30 دن کا"
 
-            # Metric toggle embedded in the top-products header
-            top_header = QHBoxLayout()
-            top_header.addWidget(self.chart_top_products.lbl_title)
-            top_header.addStretch()
-            self.combo_top_metric = QComboBox()
-            self.combo_top_metric.addItems(["Units Sold", "Revenue", "Profit"])
-            self.combo_top_metric.setFixedWidth(110)
-            self.combo_top_metric.currentIndexChanged.connect(self._load_reports)
-            top_header.addWidget(self.combo_top_metric)
-            self.chart_top_products.layout().insertLayout(0, top_header)
+        self.card_sales.lbl_title.setText(f"{title_prefix} کل سیل")
+        self.card_profit.lbl_title.setText(f"{title_prefix} منافع")
+        self.card_expenses.lbl_title.setText(f"{title_prefix} خرچہ")
+        self.card_bills.lbl_title.setText(f"{title_prefix} کل بل")
 
-            self.chart_category = ChartContainer("SALES BY CATEGORY")
-            self._perf_row.addWidget(self.chart_top_products, 1)
-            self._perf_row.addWidget(self.chart_category, 1)
-
-            # ── Payment methods chart (replaces placeholder) ──
-            self.chart_payments = ChartContainer("PAYMENT METHODS")
-            # Swap placeholder for real chart container in the level4 row
-            idx = self._level4_row.indexOf(self._payment_placeholder)
-            self._level4_row.removeWidget(self._payment_placeholder)
-            self._payment_placeholder.deleteLater()
-            self._level4_row.insertWidget(idx, self.chart_payments, 1)
-
-            self._charts_ready = True
-            logger.info("QtCharts widgets created successfully.")
-        except Exception as e:
-            logger.error("Failed to create QtCharts widgets: %s", e, exc_info=True)
-            self.lbl_error_banner.setText(f"Charts unavailable: {e}")
-            self.lbl_error_banner.setVisible(True)
-            return
-
-        # Now safe to load data for the first time
         self._load_reports()
 
-    # ── Events ───────────────────────────────────────────────────────────────
-
     def refresh(self) -> None:
-        """Public API to force reload report data from authoritative database."""
         AnalyticsService.invalidate_cache()
-        if self._charts_ready:
-            self._load_reports()
+        self._load_reports()
 
     def _wire_events(self) -> None:
         app_events.sale_completed.connect(self._on_app_data_changed)
@@ -338,119 +334,158 @@ class ReportsScreen(QWidget):
         app_events.inventory_changed.connect(self._on_app_data_changed)
         app_events.customer_changed.connect(self._on_app_data_changed)
 
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.setInterval(45000)
-        self.refresh_timer.timeout.connect(self._load_reports)
-        self.refresh_timer.start()
-
     def _on_app_data_changed(self) -> None:
         AnalyticsService.invalidate_cache()
-        if self._charts_ready:
-            self._load_reports()
-
-    def _on_range_changed(self) -> None:
-        is_custom = self.combo_range.currentText() == "Custom Range"
-        self.date_start.setVisible(is_custom)
-        self.date_end.setVisible(is_custom)
         self._load_reports()
 
-    def _get_current_date_range_option(self) -> tuple[str, date | None, date | None]:
-        text = self.combo_range.currentText()
-        mapping = {
-            "Today":        DateRangeOption.TODAY.value,
-            "Yesterday":    DateRangeOption.YESTERDAY.value,
-            "Last 7 Days":  DateRangeOption.LAST_7_DAYS.value,
-            "Last 30 Days": DateRangeOption.LAST_30_DAYS.value,
-            "This Month":   DateRangeOption.THIS_MONTH.value,
-            "Custom Range": DateRangeOption.CUSTOM.value,
-        }
-        option_val = mapping.get(text, DateRangeOption.TODAY.value)
-        c_start = c_end = None
-        if option_val == DateRangeOption.CUSTOM.value:
-            c_start = self.date_start.date().toPython()
-            c_end   = self.date_end.date().toPython()
-        return option_val, c_start, c_end
-
-    # ── Data loading ─────────────────────────────────────────────────────────
-
     def _load_reports(self) -> None:
-        """Fetch metrics from AnalyticsService and update all UI widgets."""
-        if not self._charts_ready:
-            # Charts not built yet — called by timer before Phase 2 finished; ignore.
-            return
-
-        self.lbl_error_banner.setVisible(False)
         try:
-            option_val, c_start, c_end = self._get_current_date_range_option()
-
             with get_session() as session:
                 service = AnalyticsService(session)
 
-                # 1. KPI Cards
-                kpi_data_list = service.get_kpi_cards(option_val, c_start, c_end)
-                for idx, kpi_data in enumerate(kpi_data_list):
-                    if idx < len(self.kpi_cards):
-                        self.kpi_cards[idx].update_data(kpi_data)
+                # 1. Summary Metrics
+                curr_start, curr_end, prev_start, prev_end, _ = service.get_date_range_bounds(self.selected_range)
+                c_rev, c_profit, c_tx, _ = service._repo.get_revenue_and_profit(curr_start, curr_end)
+                p_rev, _, _, _ = service._repo.get_revenue_and_profit(prev_start, prev_end)
 
-                # 2. Revenue Trend
-                trend_points = service.get_revenue_trend(option_val, c_start, c_end)
-                has_rev = self._build_revenue_trend_chart(self.chart_revenue_trend.chart, trend_points)
-                self.chart_revenue_trend.show_empty_state(not has_rev)
+                sub_rev = ""
+                if p_rev > 0:
+                    pct = float(((c_rev - p_rev) / p_rev * 100).quantize(Decimal("0.1")))
+                    if pct > 0:
+                        sub_rev = f"پچھلے مقابلے میں +{pct:.0f}%"
+                    elif pct < 0:
+                        sub_rev = f"پچھلے مقابلے میں {pct:.0f}%"
 
-                # 3. Revenue vs Profit
-                has_profit = self._build_revenue_vs_profit_chart(self.chart_rev_vs_profit.chart, trend_points)
-                self.chart_rev_vs_profit.show_empty_state(not has_profit)
+                self.card_sales.set_values(self.card_sales.lbl_title.text(), format_currency(c_rev), sub_rev)
+                self.card_profit.set_values(self.card_profit.lbl_title.text(), format_currency(c_profit))
+                self.card_bills.set_values(self.card_bills.lbl_title.text(), str(c_tx))
 
-                # 4. Top Products
-                top_metric_code = "units"
-                top_text = self.combo_top_metric.currentText()
-                if top_text == "Revenue":
-                    top_metric_code = "revenue"
-                elif top_text == "Profit":
-                    top_metric_code = "profit"
+                # Expenses calculation
+                from pakpos.database.models.expense import Expense
+                from sqlalchemy import func
+                exp_sum = session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
+                    Expense.created_at >= curr_start, Expense.created_at <= curr_end
+                ).scalar()
+                self.card_expenses.set_values(self.card_expenses.lbl_title.text(), format_currency(Decimal(str(exp_sum))))
 
-                top_products = service.get_top_products(
-                    option_val, c_start, c_end, limit=5, sort_by=top_metric_code
-                )
-                has_top = self._build_top_products_chart(
-                    self.chart_top_products.chart, top_products, metric=top_metric_code
-                )
-                self.chart_top_products.show_empty_state(not has_top)
+                # 2. Low Stock List
+                self.list_stock.clear()
+                stock_alerts = service.get_stock_alerts(limit=8)
+                if not stock_alerts:
+                    item = QListWidgetItem("سب چیزوں کا اسٹاک مکمل ہے ✓")
+                    item.setForeground(Qt.GlobalColor.green)
+                    self.list_stock.addItem(item)
+                else:
+                    for sa in stock_alerts:
+                        qty_str = format_quantity(sa.current_stock)
+                        if sa.is_out_of_stock:
+                            txt = f"❌ {sa.name}  —  اسٹاک ختم!"
+                            item = QListWidgetItem(txt)
+                            item.setForeground(Qt.GlobalColor.red)
+                        else:
+                            txt = f"⚠️ {sa.name}  —  صرف {qty_str} باقی"
+                            item = QListWidgetItem(txt)
+                            item.setForeground(Qt.GlobalColor.yellow)
+                        self.list_stock.addItem(item)
 
-                # 5. Category Performance
-                cat_perf = service.get_category_performance(option_val, c_start, c_end)
-                has_cat = self._build_donut_chart(self.chart_category.chart, cat_perf)
-                self.chart_category.show_empty_state(not has_cat)
+                # 3. Udhaar List
+                self.list_udhaar.clear()
+                khata_total, debtor_count = service._repo.get_khata_summary()
+                if khata_total == 0:
+                    item = QListWidgetItem("کوئی ادھار باقی نہیں ✓")
+                    item.setForeground(Qt.GlobalColor.green)
+                    self.list_udhaar.addItem(item)
+                else:
+                    from pakpos.database.models.customer import Customer
+                    debtors = session.query(Customer).filter(
+                        Customer.is_active == True, Customer.current_balance > 0
+                    ).order_by(Customer.current_balance.desc()).limit(6).all()
 
-                # 6. Payment Methods
-                pay_breakdown = service.get_payment_breakdown(option_val, c_start, c_end)
-                has_pay = self._build_donut_chart(self.chart_payments.chart, pay_breakdown)
-                self.chart_payments.show_empty_state(not has_pay)
+                    for c in debtors:
+                        item = QListWidgetItem(f"👤 {c.name}  —  {format_currency(c.current_balance)}")
+                        self.list_udhaar.addItem(item)
 
-                # 7. Inventory Health
-                inv = service.get_inventory_health()
-                self.lbl_inv_total.setText(f"Total Products: {inv.total_products}")
-                self.lbl_inv_healthy.setText(f"Healthy Stock: {inv.healthy_count}")
-                self.lbl_inv_low.setText(f"Low Stock: {inv.low_stock_count}")
-                self.lbl_inv_out.setText(f"Out of Stock: {inv.out_of_stock_count}")
-                self.lbl_inv_cost.setText(f"Inventory Cost: {format_currency(inv.stock_cost_value)}")
-                self.lbl_inv_retail.setText(f"Retail Value: {format_currency(inv.stock_retail_value)}")
-                self.lbl_inv_margin.setText(f"Potential Margin: {format_currency(inv.potential_margin)}")
+                # 4. Top Selling Products List
+                self.list_top.clear()
+                top_products = service.get_top_products(self.selected_range, limit=5, sort_by="units")
+                if not top_products:
+                    item = QListWidgetItem("ابھی کوئی سیل ریکارڈ نہیں ہوئی")
+                    item.setForeground(Qt.GlobalColor.gray)
+                    self.list_top.addItem(item)
+                else:
+                    for idx, tp in enumerate(top_products, start=1):
+                        qty_str = format_quantity(tp.units_sold)
+                        item = QListWidgetItem(f"{idx}. {tp.name}  —  ({qty_str} عدد / {format_currency(tp.revenue)})")
+                        self.list_top.addItem(item)
 
-                # 8. Business Insights
-                insights = service.get_insights(option_val, c_start, c_end)
-                self.list_insights.clear()
-                for ins in insights:
-                    item = QListWidgetItem(f"• {ins.message}")
-                    if ins.severity == "critical":
-                        item.setForeground(Qt.GlobalColor.red)
-                    elif ins.severity == "warning":
-                        item.setForeground(Qt.GlobalColor.yellow)
-                    else:
-                        item.setForeground(Qt.GlobalColor.cyan)
-                    self.list_insights.addItem(item)
+                # 5. Today's Expenses Breakdown List
+                self.list_exp.clear()
+                today_start = datetime.combine(datetime.now(timezone.utc).date(), datetime.min.time()).replace(tzinfo=timezone.utc)
+                today_end = datetime.combine(datetime.now(timezone.utc).date(), datetime.max.time()).replace(tzinfo=timezone.utc)
+
+                exp_rows = session.query(
+                    Expense.category, func.sum(Expense.amount).label("cat_total")
+                ).filter(
+                    Expense.created_at >= today_start, Expense.created_at <= today_end
+                ).group_by(Expense.category).all()
+
+                if not exp_rows:
+                    item = QListWidgetItem("آج کوئی خرچہ درج نہیں ہوا")
+                    item.setForeground(Qt.GlobalColor.gray)
+                    self.list_exp.addItem(item)
+                else:
+                    for r in exp_rows:
+                        cat_name = r.category or "عام خرچہ"
+                        amt_str = format_currency(Decimal(str(r.cat_total)))
+                        item = QListWidgetItem(f"• {cat_name}  —  {amt_str}")
+                        self.list_exp.addItem(item)
+
+                # 6. Recent Sales Table
+                from pakpos.database.repositories.sale_repo import SaleRepository
+                sale_repo = SaleRepository(session)
+                recent_sales = sale_repo.get_by_date_range(curr_start, curr_end)[:6]
+
+                self.tbl_sales.setRowCount(0)
+                for row_idx, sale in enumerate(recent_sales):
+                    self.tbl_sales.insertRow(row_idx)
+                    self.tbl_sales.setItem(row_idx, 0, QTableWidgetItem(sale.invoice_number))
+
+                    dt_str = sale.created_at.strftime("%H:%M") if sale.created_at else ""
+                    self.tbl_sales.setItem(row_idx, 1, QTableWidgetItem(dt_str))
+
+                    cust_name = sale.customer.name if sale.customer else "عام گاہک"
+                    self.tbl_sales.setItem(row_idx, 2, QTableWidgetItem(cust_name))
+
+                    self.tbl_sales.setItem(row_idx, 3, QTableWidgetItem(f"Rs. {float(sale.total):,.0f}"))
+
+                    btn_reprint = QPushButton("پرنٹ کریں")
+                    btn_reprint.setStyleSheet("""
+                        QPushButton {
+                            background-color: #2d6cdf;
+                            color: white;
+                            border-radius: 4px;
+                            padding: 4px 8px;
+                            font-size: 11px;
+                        }
+                        QPushButton:hover {
+                            background-color: #2457c1;
+                        }
+                    """)
+                    btn_reprint.clicked.connect(lambda _, s_id=sale.id: self._on_reprint(s_id))
+                    self.tbl_sales.setCellWidget(row_idx, 4, btn_reprint)
 
         except Exception as e:
-            logger.error("Failed to refresh analytics dashboard: %s", e, exc_info=True)
-            self.lbl_error_banner.setText(f"Notice: Analytics updates partially restricted ({e})")
-            self.lbl_error_banner.setVisible(True)
+            logger.error("Failed to load ultra simple dashboard: %s", e, exc_info=True)
+
+    def _on_reprint(self, sale_id: int) -> None:
+        try:
+            with get_session() as session:
+                from pakpos.services.sales_service import SalesService
+                from pakpos.ui.dialogs.receipt_preview_dialog import ReceiptPreviewDialog
+
+                sales_svc = SalesService(session)
+                receipt = sales_svc.get_receipt_data(sale_id, is_reprint=True)
+                dlg = ReceiptPreviewDialog(receipt, parent=self)
+                dlg.exec()
+        except Exception as e:
+            logger.error("Failed to reprint receipt #%d: %s", sale_id, e, exc_info=True)

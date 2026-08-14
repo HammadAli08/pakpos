@@ -19,6 +19,7 @@ from pakpos.ui.screens.pos_screen import PosScreen
 from pakpos.ui.screens.products_screen import ProductsScreen
 from pakpos.ui.screens.reports_screen import ReportsScreen
 from pakpos.ui.screens.backup_screen import BackupScreen
+from pakpos.ui.screens.settings_screen import SettingsScreen
 from pakpos.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -91,7 +92,10 @@ class MainWindow(QMainWindow):
         self.btn_backup = QPushButton("Backups")
         self.btn_backup.clicked.connect(lambda: self._set_active_screen(3))
 
-        self.nav_buttons = [self.btn_pos, self.btn_products, self.btn_reports, self.btn_backup]
+        self.btn_settings = QPushButton("Printer Settings")
+        self.btn_settings.clicked.connect(lambda: self._set_active_screen(4))
+
+        self.nav_buttons = [self.btn_pos, self.btn_products, self.btn_reports, self.btn_backup, self.btn_settings]
 
         for btn in self.nav_buttons:
             btn.setFixedHeight(40)
@@ -112,11 +116,14 @@ class MainWindow(QMainWindow):
         self.screen_products = ProductsScreen(current_user=self.current_user)
         self.screen_reports = ReportsScreen(current_user=self.current_user)
         self.screen_backup = BackupScreen(current_user=self.current_user)
+        self.screen_settings = SettingsScreen()
 
         self.stack.addWidget(self.screen_pos)
         self.stack.addWidget(self.screen_products)
         self.stack.addWidget(self.screen_reports)
         self.stack.addWidget(self.screen_backup)
+        self.stack.addWidget(self.screen_settings)
+
 
         main_layout.addWidget(sidebar)
         main_layout.addWidget(self.stack, 1)

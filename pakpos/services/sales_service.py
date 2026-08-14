@@ -21,6 +21,7 @@ from pakpos.database.models.user import User
 from pakpos.database.repositories.product_repo import ProductRepository
 from pakpos.database.repositories.sale_repo import SaleRepository
 from pakpos.database.repositories.customer_repo import CustomerRepository
+from pakpos.database.models.setting import SettingKey
 from pakpos.hardware.printer.base import ReceiptData
 from pakpos.utils.logger import get_logger
 from pakpos.utils.validators import validate_quantity, validate_price, validate_discount, ValidationError
@@ -279,26 +280,49 @@ class SalesService:
             .all()
         )
 
-    def get_receipt_data(self, sale_id: int) -> ReceiptData:
+    def get_receipt_data(self, sale_id: int, is_reprint: bool = False) -> ReceiptData:
         """Generate ReceiptData DTO for printing or reprinting any completed sale."""
         sale = self._sale_repo.get_by_id(sale_id)
         if sale is None:
             raise ValueError(f"Sale #{sale_id} not found")
+
+        from pakpos.database.repositories.setting_repo import SettingRepository
+        setting_repo = SettingRepository(self._session)
+        settings = setting_repo.get_printer_settings()
+
+        shop_name = settings.get(SettingKey.SHOP_NAME, "PakPOS Retail Store")
+        shop_address = settings.get(SettingKey.SHOP_ADDRESS, "Main Market, Lahore")
+        shop_phone = settings.get(SettingKey.SHOP_PHONE, "0300-1234567")
+        footer_msg = settings.get(SettingKey.RECEIPT_FOOTER, "Thank you for shopping with us!")
+        if is_reprint and "(REPRINT)" not in footer_msg:
+            footer_msg = f"{footer_msg}\n*** (REPRINT) ***"
+        tax_num = settings.get(SettingKey.TAX_NUMBER, "")
+        logo_path = settings.get(SettingKey.SHOP_LOGO_PATH, None)
+        paper_width = int(settings.get(SettingKey.PRINTER_PAPER_WIDTH, "80"))
 
         items_dto = [
             {
                 "name": item.product_name_snapshot,
                 "qty": float(item.quantity),
                 "unit_price": float(item.unit_price),
+                "discount": float(item.discount),
+                "tax": float(item.tax),
                 "total": float(item.total),
             }
             for item in sale.items
         ]
 
+        created_dt = sale.created_at
+        date_str = created_dt.strftime("%d-%b-%Y") if created_dt else ""
+        time_str = created_dt.strftime("%I:%M %p") if created_dt else ""
+
+        # QR payload: Invoice number + Total + Date
+        qr_payload = f"INV:{sale.invoice_number}|TOTAL:{float(sale.total):.2f}|DATE:{date_str}"
+
         return ReceiptData(
-            shop_name="PakPOS Retail Store",
-            shop_address="Main Market, Lahore",
-            shop_phone="0300-1234567",
+            shop_name=shop_name,
+            shop_address=shop_address,
+            shop_phone=shop_phone,
             invoice_number=sale.invoice_number,
             cashier_name=sale.cashier.username if sale.cashier else "System",
             items=items_dto,
@@ -310,9 +334,20 @@ class SalesService:
             change=float(max(Decimal("0"), sale.paid_amount - sale.total)),
             payment_method=sale.payment_method,
             customer_name=sale.customer.name if sale.customer else None,
-            footer_message="Thank you for shopping with us! (REPRINT)" if sale.status == SaleStatus.COMPLETED else f"--- {sale.status.upper()} ---",
-            created_at=sale.created_at.strftime("%d-%b-%Y %H:%M") if sale.created_at else "",
+            customer_phone=sale.customer.phone if sale.customer else None,
+            footer_message=footer_msg,
+            paper_width_mm=paper_width,
+            created_at=f"{date_str} {time_str}".strip(),
+            sale_id=sale.id,
+            due_amount=float(sale.due_amount),
+            qr_payload=qr_payload,
+            logo_path=logo_path if logo_path else None,
+            is_reprint=is_reprint,
+            sale_date=date_str,
+            sale_time=time_str,
+            tax_number=tax_num if tax_num else None,
         )
+
 
     def void_sale(self, sale_id: int, reason: str, user_id: int | None = None) -> None:
         """Void a sale — requires OWNER or MANAGER authorization."""

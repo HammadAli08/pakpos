@@ -17,7 +17,7 @@ from pakpos.utils.validators import validate_quantity
 def qapp():
     app = QApplication.instance()
     if app is None:
-        app = QApplication([])
+        app = QApplication(["-platform", "offscreen"])
     yield app
 
 

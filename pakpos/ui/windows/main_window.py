@@ -26,14 +26,15 @@ logger = get_logger(__name__)
 
 class MainWindow(QMainWindow):
     """
-    Main Application Window container with tab/sidebar navigation.
+    Main Application Window container with sidebar navigation.
     """
 
     def __init__(self, current_user=None) -> None:
         super().__init__()
         self.current_user = current_user
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION} — Offline POS")
-        self.resize(1180, 720)
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION} — Offline POS Terminal")
+        self.setMinimumSize(1280, 768)
+        self.resize(1366, 768)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -46,44 +47,62 @@ class MainWindow(QMainWindow):
         # ─── NAV SIDEBAR ───
         sidebar = QFrame()
         sidebar.setObjectName("card")
-        sidebar.setFixedWidth(200)
+        sidebar.setFixedWidth(220)
+        sidebar.setStyleSheet("""
+            QFrame#card {
+                background-color: #141619;
+                border-right: 1px solid #2d3139;
+            }
+        """)
         nav_layout = QVBoxLayout(sidebar)
-        nav_layout.setContentsMargins(10, 15, 10, 15)
+        nav_layout.setContentsMargins(12, 18, 12, 18)
+        nav_layout.setSpacing(10)
 
-        # App Logo Label
+        # App Logo & Status Header
         lbl_app = QLabel("PakPOS")
-        lbl_app.setObjectName("label_title")
+        lbl_app.setStyleSheet("font-weight: 900; font-size: 22px; color: #20c997; letter-spacing: 1px;")
         lbl_app.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        nav_layout.addWidget(lbl_app)
 
-        lbl_role = QLabel(f"User: {self.current_user.username if self.current_user else 'Guest'}")
-        lbl_role.setObjectName("label_subtitle")
+        lbl_offline = QLabel("● Offline Mode")
+        lbl_offline.setStyleSheet("font-size: 11px; font-weight: 600; color: #20c997; background-color: rgba(32, 201, 151, 0.12); border-radius: 4px; padding: 2px 8px;")
+        lbl_offline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        lbl_role = QLabel(f"Cashier: {self.current_user.username if self.current_user else 'Guest'}")
+        lbl_role.setStyleSheet("color: #9ca3af; font-size: 12px; font-weight: 500;")
         lbl_role.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        nav_layout.addWidget(lbl_app)
+        nav_layout.addWidget(lbl_offline, 0, Qt.AlignmentFlag.AlignCenter)
         nav_layout.addWidget(lbl_role)
-        nav_layout.addSpacing(20)
+        nav_layout.addSpacing(15)
 
         # Navigation Buttons
+        self.nav_buttons: list[QPushButton] = []
+
         self.btn_pos = QPushButton("Checkout (F1)")
-        self.btn_pos.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.btn_pos.clicked.connect(lambda: self._set_active_screen(0))
 
         self.btn_products = QPushButton("Products & Stock")
-        self.btn_products.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        self.btn_products.clicked.connect(lambda: self._set_active_screen(1))
 
         self.btn_reports = QPushButton("Reports & Insights")
-        self.btn_reports.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        self.btn_reports.clicked.connect(lambda: self._set_active_screen(2))
 
         self.btn_backup = QPushButton("Backups")
-        self.btn_backup.clicked.connect(lambda: self.stack.setCurrentIndex(3))
+        self.btn_backup.clicked.connect(lambda: self._set_active_screen(3))
 
-        nav_layout.addWidget(self.btn_pos)
-        nav_layout.addWidget(self.btn_products)
-        nav_layout.addWidget(self.btn_reports)
-        nav_layout.addWidget(self.btn_backup)
+        self.nav_buttons = [self.btn_pos, self.btn_products, self.btn_reports, self.btn_backup]
+
+        for btn in self.nav_buttons:
+            btn.setFixedHeight(40)
+            nav_layout.addWidget(btn)
+
         nav_layout.addStretch()
 
         # Sign Out Button
         btn_logout = QPushButton("Sign Out")
         btn_logout.setObjectName("btn_danger")
+        btn_logout.setFixedHeight(36)
         btn_logout.clicked.connect(self._on_logout)
         nav_layout.addWidget(btn_logout)
 
@@ -100,11 +119,43 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.screen_backup)
 
         main_layout.addWidget(sidebar)
-        main_layout.addWidget(self.stack)
+        main_layout.addWidget(self.stack, 1)
 
         # Status bar
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("PakPOS Ready | Local SQLite Database Active (WAL Mode)")
+
+        self._set_active_screen(0)
+
+    def _set_active_screen(self, index: int) -> None:
+        self.stack.setCurrentIndex(index)
+        for idx, btn in enumerate(self.nav_buttons):
+            if idx == index:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2d6cdf;
+                        color: white;
+                        font-weight: 700;
+                        text-align: left;
+                        padding-left: 16px;
+                        border-radius: 6px;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: transparent;
+                        color: #9ca3af;
+                        font-weight: 500;
+                        text-align: left;
+                        padding-left: 16px;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background-color: #22252c;
+                        color: #e8eaed;
+                    }
+                """)
 
     def _on_logout(self) -> None:
         try:

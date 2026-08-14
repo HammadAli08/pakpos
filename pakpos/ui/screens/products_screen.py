@@ -15,6 +15,7 @@ from pakpos.database.repositories.product_repo import ProductRepository
 from pakpos.database.repositories.base import BaseRepository
 from pakpos.database.models.category import Category
 from pakpos.ui.dialogs.product_dialog import ProductDialog
+from pakpos.events import app_events
 from pakpos.utils.formatters import format_currency, format_quantity
 
 
@@ -97,6 +98,7 @@ class ProductsScreen(QWidget):
                     repo = ProductRepository(session)
                     repo.create(**dlg.product_data)
                     session.commit()
+                    app_events.inventory_changed.emit(0)
                     QMessageBox.information(self, "Success", "Product added successfully!")
             self._load_products()
         except Exception as e:
@@ -113,6 +115,7 @@ class ProductsScreen(QWidget):
                     repo = ProductRepository(session)
                     repo.update(product.id, **dlg.product_data)
                     session.commit()
+                    app_events.inventory_changed.emit(product.id)
                     QMessageBox.information(self, "Success", "Product updated successfully!")
             self._load_products()
         except Exception as e:

@@ -45,6 +45,7 @@ a = Analysis(
         'PySide6.QtCore',
         'PySide6.QtGui',
         'PySide6.QtWidgets',
+        'PySide6.QtCharts',
         # Security
         'bcrypt',
         # Windows printing — dynamically imported in WindowsPrinterAdapter

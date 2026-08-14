@@ -1,13 +1,13 @@
 """
-PosScreen — Main Point of Sale counter screen.
+PosScreen — Main Point of Sale Checkout Terminal Screen.
 
 Features:
-- BarcodeInput (auto-focus, instant scanner add)
-- Product Search & Grid
-- CartWidget with real-time totals
-- Touch Numpad
-- F1/F5 Keyboard Shortcuts
-- Atomic sale saving
+- Prominent BarcodeInput search field (auto-focus, scanner integration)
+- ProductGridWidget with visual product cards & category filter tabs
+- Compact POS CartWidget with live quantity spinboxes & stock limit guard
+- Summary panel displaying Subtotal, Tax, and prominent GRAND TOTAL DUE
+- F1 (search), Enter (add), F5 (checkout), Esc (clear), Delete (remove) shortcuts
+- Post-sale completion confirmation and instant workflow reset for next customer
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QLabel,
-    QPushButton, QMessageBox, QFrame, QListWidget, QListWidgetItem
+    QPushButton, QMessageBox, QFrame
 )
 
 from pakpos.database.engine import get_session
@@ -26,9 +26,10 @@ from pakpos.services.sales_service import SalesService, SaleRequest, CartItem
 from pakpos.hardware.printer.mock_adapter import MockPrinterAdapter
 from pakpos.hardware.printer.base import ReceiptData
 from pakpos.ui.widgets.barcode_input import BarcodeInput
+from pakpos.ui.widgets.product_grid import ProductGridWidget, ProductCard
 from pakpos.ui.widgets.cart_widget import CartWidget
-from pakpos.ui.widgets.numeric_pad import NumericPad
 from pakpos.ui.dialogs.payment_dialog import PaymentDialog
+from pakpos.events import app_events
 from pakpos.utils.formatters import format_currency
 from pakpos.utils.logger import get_logger
 
@@ -49,85 +50,129 @@ class PosScreen(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # ─── LEFT PANEL: Search & Product List ───
+        # ─── LEFT PANEL: Search & Product Card Grid ───
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
+
+        # Search Bar
+        search_frame = QFrame()
+        search_frame.setObjectName("card")
+        search_layout = QHBoxLayout(search_frame)
+        search_layout.setContentsMargins(8, 8, 8, 8)
 
         self.input_barcode = BarcodeInput()
+        self.input_barcode.setPlaceholderText("Search product name, barcode, or SKU... (F1)")
         self.input_barcode.barcode_scanned.connect(self._on_barcode_scanned)
         self.input_barcode.textChanged.connect(self._on_search_text_changed)
+        self.input_barcode.returnPressed.connect(self._on_search_enter_pressed)
 
-        self.list_products = QListWidget()
-        self.list_products.itemDoubleClicked.connect(self._on_product_double_clicked)
-        self.list_products.itemActivated.connect(self._on_product_double_clicked)
+        search_layout.addWidget(self.input_barcode)
 
-        left_layout.addWidget(self.input_barcode)
-        left_layout.addWidget(self.list_products)
+        # Product Grid Widget (Category Tabs + Cards)
+        self.product_grid = ProductGridWidget()
+        self.product_grid.product_selected.connect(self._on_card_clicked)
+        self.product_grid.out_of_stock_selected.connect(self._on_out_of_stock_clicked)
 
-        # ─── RIGHT PANEL: Cart & Checkout ───
+        left_layout.addWidget(search_frame)
+        left_layout.addWidget(self.product_grid, 1)
+
+        # ─── RIGHT PANEL: Cart & Totals Summary ───
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
 
+        # Cart Widget
         self.cart_widget = CartWidget()
         self.cart_widget.cart_updated.connect(self._update_totals)
 
-        # Totals Panel
+        # Totals Summary Card
         box_totals = QFrame()
         box_totals.setObjectName("card")
+        box_totals.setStyleSheet("""
+            QFrame#card {
+                background-color: #22252c;
+                border: 1px solid #2d3139;
+                border-radius: 8px;
+                padding: 12px;
+            }
+        """)
         tot_layout = QVBoxLayout(box_totals)
+        tot_layout.setContentsMargins(12, 10, 12, 10)
+        tot_layout.setSpacing(6)
 
+        # Subtotal & Tax Row
         summary_row = QHBoxLayout()
-        lbl_sub = QLabel("Subtotal:")
-        lbl_sub.setObjectName("label_subtitle")
+        lbl_sub_title = QLabel("Subtotal:")
+        lbl_sub_title.setStyleSheet("color: #9ca3af; font-size: 12px;")
         self.lbl_subtotal_amount = QLabel("Rs. 0.00")
+        self.lbl_subtotal_amount.setStyleSheet("font-weight: 600; font-size: 13px; color: #e8eaed;")
         self.lbl_subtotal_amount.setAlignment(Qt.AlignmentFlag.AlignRight)
 
-        lbl_tax = QLabel("Tax:")
-        lbl_tax.setObjectName("label_subtitle")
+        lbl_tax_title = QLabel("Tax:")
+        lbl_tax_title.setStyleSheet("color: #9ca3af; font-size: 12px;")
         self.lbl_tax_amount = QLabel("Rs. 0.00")
+        self.lbl_tax_amount.setStyleSheet("font-weight: 600; font-size: 13px; color: #e8eaed;")
         self.lbl_tax_amount.setAlignment(Qt.AlignmentFlag.AlignRight)
 
-        summary_row.addWidget(lbl_sub)
+        summary_row.addWidget(lbl_sub_title)
         summary_row.addWidget(self.lbl_subtotal_amount)
-        summary_row.addSpacing(20)
-        summary_row.addWidget(lbl_tax)
+        summary_row.addSpacing(24)
+        summary_row.addWidget(lbl_tax_title)
         summary_row.addWidget(self.lbl_tax_amount)
 
-        lbl_tot_title = QLabel("GRAND TOTAL DUE")
-        lbl_tot_title.setObjectName("label_subtitle")
+        # Grand Total Due
+        lbl_tot_title = QLabel("TOTAL DUE")
+        lbl_tot_title.setStyleSheet("font-weight: 700; font-size: 12px; color: #9ca3af; letter-spacing: 0.5px;")
         self.lbl_total_amount = QLabel("Rs. 0.00")
-        self.lbl_total_amount.setObjectName("label_amount")
+        self.lbl_total_amount.setStyleSheet("font-weight: 800; font-size: 26px; color: #20c997;")
 
         tot_layout.addLayout(summary_row)
         tot_layout.addWidget(lbl_tot_title)
         tot_layout.addWidget(self.lbl_total_amount)
 
-        # Buttons
+        # Action Buttons
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
 
         btn_clear = QPushButton("Clear Cart (Esc)")
         btn_clear.setObjectName("btn_secondary")
+        btn_clear.setFixedHeight(44)
         btn_clear.clicked.connect(self.cart_widget.clear_cart)
 
-        btn_pay = QPushButton("Checkout Payment (F5)")
+        btn_pay = QPushButton("CHECKOUT / PAY (F5)")
         btn_pay.setObjectName("btn_success")
-        btn_pay.setFixedHeight(45)
+        btn_pay.setFixedHeight(44)
+        btn_pay.setStyleSheet("""
+            QPushButton#btn_success {
+                background-color: #198754;
+                font-weight: 800;
+                font-size: 14px;
+                letter-spacing: 0.5px;
+            }
+            QPushButton#btn_success:hover {
+                background-color: #1fa863;
+            }
+        """)
         btn_pay.clicked.connect(self._on_checkout)
 
-        btn_layout.addWidget(btn_clear)
-        btn_layout.addWidget(btn_pay)
+        btn_layout.addWidget(btn_clear, 1)
+        btn_layout.addWidget(btn_pay, 2)
 
-        right_layout.addWidget(self.cart_widget)
+        right_layout.addWidget(self.cart_widget, 1)
         right_layout.addWidget(box_totals)
         right_layout.addLayout(btn_layout)
 
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setSizes([350, 650])
+        splitter.setSizes([450, 550])
 
         layout.addWidget(splitter)
         self._load_products()
@@ -140,37 +185,69 @@ class PosScreen(QWidget):
         shortcut_f1.activated.connect(self.input_barcode.setFocus)
 
         shortcut_esc = QShortcut(QKeySequence("Esc"), self)
-        shortcut_esc.activated.connect(self.cart_widget.clear_cart)
+        shortcut_esc.activated.connect(self._on_esc_pressed)
+
+        shortcut_del = QShortcut(QKeySequence("Delete"), self)
+        shortcut_del.activated.connect(self._on_delete_pressed)
 
     def _load_products(self, query: str = "") -> None:
-        self.list_products.clear()
-        with get_session() as session:
-            repo = ProductRepository(session)
-            products = repo.search(query, limit=30) if query else repo.get_all(active_only=True)[:30]
-            for p in products:
-                item = QListWidgetItem(f"{p.name} — Rs.{p.sale_price:,.2f} (Stock: {p.current_stock})")
-                item.setData(Qt.ItemDataRole.UserRole, p.id)
-                self.list_products.addItem(item)
+        self.product_grid.refresh_products(query)
 
     def _on_search_text_changed(self, text: str) -> None:
         self._load_products(text)
+
+    def _on_search_enter_pressed(self) -> None:
+        query = self.input_barcode.text().strip()
+        if not query:
+            return
+
+        # Check exact barcode match first
+        with get_session() as session:
+            repo = ProductRepository(session)
+            product = repo.get_by_barcode(query)
+            if product:
+                if product.current_stock <= 0:
+                    QMessageBox.warning(self, "Out of Stock", f"Product '{product.name}' is currently out of stock.")
+                else:
+                    self._add_product_to_cart(product)
+                    self.input_barcode.clear()
+                return
+
+        # Otherwise add first available card in grid
+        card = self.product_grid.get_first_available_card()
+        if card:
+            self._add_card_to_cart(card)
+            self.input_barcode.clear()
 
     def _on_barcode_scanned(self, barcode: str) -> None:
         with get_session() as session:
             repo = ProductRepository(session)
             product = repo.get_by_barcode(barcode)
             if product:
-                self._add_product_to_cart(product)
+                if product.current_stock <= 0:
+                    QMessageBox.warning(self, "Out of Stock", f"Product '{product.name}' is currently out of stock.")
+                else:
+                    self._add_product_to_cart(product)
             else:
                 QMessageBox.warning(self, "Product Not Found", f"No product found with barcode '{barcode}'.")
 
-    def _on_product_double_clicked(self, item: QListWidgetItem) -> None:
-        prod_id = item.data(Qt.ItemDataRole.UserRole)
-        with get_session() as session:
-            repo = ProductRepository(session)
-            product = repo.get_by_id(prod_id)
-            if product:
-                self._add_product_to_cart(product)
+    def _on_card_clicked(self, card: ProductCard) -> None:
+        self._add_card_to_cart(card)
+
+    def _on_out_of_stock_clicked(self, card: ProductCard) -> None:
+        QMessageBox.warning(self, "Out of Stock", f"Product '{card.product_name}' is currently out of stock.")
+
+    def _add_card_to_cart(self, card: ProductCard) -> None:
+        cart_item = CartItem(
+            product_id=card.product_id,
+            product_name=card.product_name,
+            barcode=card.barcode,
+            quantity=Decimal("1"),
+            unit_price=card.sale_price,
+            tax_rate=card.tax_rate,
+        )
+        self.cart_widget.add_item(cart_item)
+        self.input_barcode.setFocus()
 
     def _add_product_to_cart(self, product) -> None:
         cart_item = CartItem(
@@ -183,6 +260,17 @@ class PosScreen(QWidget):
         )
         self.cart_widget.add_item(cart_item)
         self.input_barcode.setFocus()
+
+    def _on_esc_pressed(self) -> None:
+        if self.input_barcode.hasFocus() and self.input_barcode.text():
+            self.input_barcode.clear()
+        else:
+            self.cart_widget.clear_cart()
+
+    def _on_delete_pressed(self) -> None:
+        items = self.cart_widget.get_items()
+        if items:
+            self.cart_widget.remove_item(len(items) - 1)
 
     def _update_totals(self) -> None:
         subtotal = self.cart_widget.get_subtotal()
@@ -206,7 +294,6 @@ class PosScreen(QWidget):
 
             dlg = PaymentDialog(total, customers, self)
             if dlg.exec() == PaymentDialog.DialogCode.Accepted:
-                # Create Sale
                 sales_service = SalesService(session)
                 req = SaleRequest(
                     items=items,
@@ -219,8 +306,9 @@ class PosScreen(QWidget):
                 try:
                     result = sales_service.create_sale(req)
                     session.commit()
+                    app_events.sale_completed.emit(result.sale_id)
 
-                    # Print Receipt (Mock or Real)
+                    # Print Receipt
                     receipt = ReceiptData(
                         shop_name="PakPOS Retail",
                         shop_address="Main Bazar, Lahore",
@@ -240,15 +328,21 @@ class PosScreen(QWidget):
                     )
                     self.printer.print_receipt(receipt)
 
+                    # Sale Completed Confirmation Dialog
                     QMessageBox.information(
-                        self, "Sale Completed",
-                        f"Invoice {result.invoice_number} saved successfully!\n\n"
-                        f"Total: {format_currency(result.total)}\n"
-                        f"Change: {format_currency(result.change)}"
+                        self,
+                        "Sale Completed",
+                        f"Invoice #{result.invoice_number} saved successfully!\n\n"
+                        f"Total Amount: {format_currency(result.total)}\n"
+                        f"Paid Amount:  {format_currency(result.paid_amount)}\n"
+                        f"Change Due:   {format_currency(result.change)}"
                     )
 
+                    # Reset workflow for next customer
                     self.cart_widget.clear_cart()
+                    self.input_barcode.clear()
                     self._load_products()
+                    self.input_barcode.setFocus()
 
                 except Exception as e:
                     session.rollback()

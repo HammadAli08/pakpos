@@ -8,6 +8,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QMessageBox, QGroupBox
@@ -36,6 +37,14 @@ class PaymentDialog(QDialog):
         self.setMinimumWidth(480)
         self.setMinimumHeight(480)
         self._setup_ui()
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self) -> None:
+        shortcut_f5 = QShortcut(QKeySequence("F5"), self)
+        shortcut_f5.activated.connect(self._on_confirm)
+
+        shortcut_esc = QShortcut(QKeySequence("Esc"), self)
+        shortcut_esc.activated.connect(self.reject)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -143,6 +152,7 @@ class PaymentDialog(QDialog):
         self.btn_confirm = QPushButton("Complete Sale (F5)")
         self.btn_confirm.setObjectName("btn_success")
         self.btn_confirm.setFixedHeight(42)
+        self.btn_confirm.clicked.connect(self._on_confirm)
         btn_layout.addWidget(btn_cancel)
         btn_layout.addWidget(self.btn_confirm)
         layout.addLayout(btn_layout)

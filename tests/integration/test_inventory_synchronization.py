@@ -141,7 +141,7 @@ class TestInventorySynchronization:
         from PySide6.QtWidgets import QApplication
         import sys
 
-        app = QApplication.instance() or QApplication(sys.argv)
+        app = QApplication.instance() or QApplication(["-platform", "offscreen"])
 
         with get_session() as session:
             user = session.get(User, test_user_id)

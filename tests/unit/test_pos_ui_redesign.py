@@ -24,7 +24,7 @@ def init_db():
 def qapp():
     app = QApplication.instance()
     if app is None:
-        app = QApplication([])
+        app = QApplication(["-platform", "offscreen"])
     yield app
 
 

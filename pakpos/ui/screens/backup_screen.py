@@ -69,6 +69,10 @@ class BackupScreen(QWidget):
         except BackupError as e:
             QMessageBox.critical(self, "Backup Failed", str(e))
 
+    def refresh(self) -> None:
+        """Public API to reload backups list."""
+        self._load_backups()
+
     def _on_restore_backup(self) -> None:
         current_item = self.list_backups.currentItem()
         if not current_item:
@@ -87,8 +91,10 @@ class BackupScreen(QWidget):
         if confirm == QMessageBox.StandardButton.Yes:
             try:
                 self.backup_service.restore_backup(backup_path)
+                from pakpos.events import app_events
+                app_events.inventory_changed.emit(0)
                 QMessageBox.information(
-                    self, "Restore Complete", "Database restored successfully!\n\nPlease restart PakPOS."
+                    self, "Restore Complete", "Database restored successfully!"
                 )
             except BackupError as e:
                 QMessageBox.critical(self, "Restore Failed", str(e))

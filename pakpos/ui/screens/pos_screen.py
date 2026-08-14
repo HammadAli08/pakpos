@@ -47,6 +47,16 @@ class PosScreen(QWidget):
         self.printer = MockPrinterAdapter()
         self._setup_ui()
         self._setup_shortcuts()
+        self._subscribe_events()
+
+    def _subscribe_events(self) -> None:
+        """Subscribe to central application domain events."""
+        app_events.inventory_changed.connect(lambda _: self._load_products())
+        app_events.sale_voided.connect(lambda _: self._load_products())
+
+    def refresh(self) -> None:
+        """Public API to force reload products directly from authoritative database."""
+        self._load_products()
 
     def _setup_ui(self) -> None:
         layout = QHBoxLayout(self)

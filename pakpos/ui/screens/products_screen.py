@@ -22,12 +22,14 @@ from pakpos.utils.formatters import format_currency, format_quantity
 class ProductsScreen(QWidget):
     """
     Product & Inventory Catalog Screen.
+    Subscribes to global domain events for real-time stock synchronization.
     """
 
     def __init__(self, current_user, parent=None) -> None:
         super().__init__(parent)
         self.current_user = current_user
         self._setup_ui()
+        self._subscribe_events()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -59,6 +61,16 @@ class ProductsScreen(QWidget):
 
         self._load_products()
 
+    def _subscribe_events(self) -> None:
+        """Subscribe to central application domain events."""
+        app_events.sale_completed.connect(lambda _: self._load_products())
+        app_events.sale_voided.connect(lambda _: self._load_products())
+        app_events.inventory_changed.connect(lambda _: self._load_products())
+
+    def refresh(self) -> None:
+        """Public API to force reload product stock directly from database."""
+        self._load_products()
+
     def _load_products(self) -> None:
         query = self.input_search.text().strip()
         self.table.setRowCount(0)
@@ -81,10 +93,10 @@ class ProductsScreen(QWidget):
                     stock_item.setForeground(Qt.GlobalColor.red)
                 self.table.setItem(i, 6, stock_item)
 
-                # Edit button
+                # Edit button — passes product_id so fresh DB record is edited
                 btn_edit = QPushButton("Edit")
                 btn_edit.setObjectName("btn_secondary")
-                btn_edit.clicked.connect(lambda _, prod=p: self._on_edit_product(prod))
+                btn_edit.clicked.connect(lambda _, pid=p.id: self._on_edit_product(pid))
                 self.table.setCellWidget(i, 7, btn_edit)
 
     def _on_add_product(self) -> None:
@@ -104,18 +116,22 @@ class ProductsScreen(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to add product:\n{e}")
 
-    def _on_edit_product(self, product) -> None:
+    def _on_edit_product(self, product_id: int) -> None:
         try:
             with get_session() as session:
                 cat_repo = BaseRepository(Category, session)
                 categories = cat_repo.get_all()
+                repo = ProductRepository(session)
+                fresh_product = repo.get_by_id(product_id)
+                if fresh_product is None:
+                    QMessageBox.warning(self, "Error", "Product not found.")
+                    return
 
-                dlg = ProductDialog(categories, product=product, parent=self)
+                dlg = ProductDialog(categories, product=fresh_product, parent=self)
                 if dlg.exec() == ProductDialog.DialogCode.Accepted:
-                    repo = ProductRepository(session)
-                    repo.update(product.id, **dlg.product_data)
+                    repo.update(product_id, **dlg.product_data)
                     session.commit()
-                    app_events.inventory_changed.emit(product.id)
+                    app_events.inventory_changed.emit(product_id)
                     QMessageBox.information(self, "Success", "Product updated successfully!")
             self._load_products()
         except Exception as e:

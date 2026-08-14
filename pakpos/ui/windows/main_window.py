@@ -129,6 +129,13 @@ class MainWindow(QMainWindow):
 
     def _set_active_screen(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        widget = self.stack.widget(index)
+        if hasattr(widget, "refresh") and callable(widget.refresh):
+            try:
+                widget.refresh()
+            except Exception as e:
+                logger.error("Error refreshing screen at index %d: %s", index, e)
+
         for idx, btn in enumerate(self.nav_buttons):
             if idx == index:
                 btn.setStyleSheet("""

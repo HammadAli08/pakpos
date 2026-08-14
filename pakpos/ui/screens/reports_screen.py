@@ -326,8 +326,15 @@ class ReportsScreen(QWidget):
 
     # ── Events ───────────────────────────────────────────────────────────────
 
+    def refresh(self) -> None:
+        """Public API to force reload report data from authoritative database."""
+        AnalyticsService.invalidate_cache()
+        if self._charts_ready:
+            self._load_reports()
+
     def _wire_events(self) -> None:
         app_events.sale_completed.connect(self._on_app_data_changed)
+        app_events.sale_voided.connect(self._on_app_data_changed)
         app_events.inventory_changed.connect(self._on_app_data_changed)
         app_events.customer_changed.connect(self._on_app_data_changed)
 
@@ -338,7 +345,8 @@ class ReportsScreen(QWidget):
 
     def _on_app_data_changed(self) -> None:
         AnalyticsService.invalidate_cache()
-        self._load_reports()
+        if self._charts_ready:
+            self._load_reports()
 
     def _on_range_changed(self) -> None:
         is_custom = self.combo_range.currentText() == "Custom Range"

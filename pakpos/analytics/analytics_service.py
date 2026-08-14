@@ -16,7 +16,8 @@ from pakpos.analytics.insights import InsightsEngine
 from pakpos.analytics.metrics import (
     DateRangeOption, KPICardData, RevenueTrendPoint, TopProductItem,
     CategoryPerformanceItem, PaymentMethodItem, InventoryHealthData,
-    StockAlertItem, PeriodComparison, BusinessInsight
+    StockAlertItem, PeriodComparison, BusinessInsight,
+    DebtorItem, ExpenseCategoryItem,
 )
 from pakpos.utils.formatters import format_currency
 from pakpos.utils.logger import get_logger
@@ -282,6 +283,30 @@ class AnalyticsService:
 
     def get_stock_alerts(self, limit: int = 10) -> list[StockAlertItem]:
         return self._repo.get_stock_alerts(limit=limit)
+
+    def get_top_debtors(self, limit: int = 6) -> list[DebtorItem]:
+        """Returns customers with outstanding balances, ordered by amount (highest first)."""
+        return self._repo.get_top_debtors(limit=limit)
+
+    def get_expense_total(
+        self,
+        option: DateRangeOption | str = DateRangeOption.TODAY,
+        custom_start=None,
+        custom_end=None,
+    ) -> Decimal:
+        """Returns total expenses for the given date range."""
+        curr_start, curr_end, _, _, _ = self.get_date_range_bounds(option, custom_start, custom_end)
+        return self._repo.get_expense_total(curr_start, curr_end)
+
+    def get_expense_by_category(
+        self,
+        option: DateRangeOption | str = DateRangeOption.TODAY,
+        custom_start=None,
+        custom_end=None,
+    ) -> list[ExpenseCategoryItem]:
+        """Returns expenses grouped by category for the given date range."""
+        curr_start, curr_end, _, _, _ = self.get_date_range_bounds(option, custom_start, custom_end)
+        return self._repo.get_expense_by_category(curr_start, curr_end)
 
     def get_period_comparison(
         self,

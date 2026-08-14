@@ -16,9 +16,11 @@ from pakpos.database.models.sale import Sale, SaleItem, SaleStatus, PaymentMetho
 from pakpos.database.models.product import Product
 from pakpos.database.models.category import Category
 from pakpos.database.models.customer import Customer
+from pakpos.database.models.expense import Expense
 from pakpos.analytics.metrics import (
     RevenueTrendPoint, TopProductItem, CategoryPerformanceItem,
-    PaymentMethodItem, InventoryHealthData, StockAlertItem
+    PaymentMethodItem, InventoryHealthData, StockAlertItem,
+    DebtorItem, ExpenseCategoryItem,
 )
 from pakpos.utils.logger import get_logger
 
@@ -470,3 +472,71 @@ class AnalyticsRepository:
         count = int(row.count or 0) if row else 0
 
         return total, count
+
+    def get_top_debtors(self, limit: int = 6) -> list[DebtorItem]:
+        """
+        Returns the top customers with outstanding credit balances, ordered
+        by balance descending. Used for the Udhaar list on the dashboard.
+        """
+        customers = (
+            self._session.query(Customer)
+            .filter(
+                Customer.is_active == True,  # noqa: E712
+                Customer.current_balance > 0,
+            )
+            .order_by(Customer.current_balance.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            DebtorItem(
+                customer_id=c.id,
+                name=c.name,
+                balance=Decimal(str(c.current_balance or 0)),
+            )
+            for c in customers
+        ]
+
+    def get_expense_total(
+        self, start: datetime, end: datetime
+    ) -> Decimal:
+        """
+        Returns the total amount of expenses recorded between start and end.
+        """
+        result = (
+            self._session.query(
+                func.coalesce(func.sum(Expense.amount), 0)
+            )
+            .filter(
+                Expense.created_at >= start,
+                Expense.created_at <= end,
+            )
+            .scalar()
+        )
+        return Decimal(str(result or 0))
+
+    def get_expense_by_category(
+        self, start: datetime, end: datetime
+    ) -> list[ExpenseCategoryItem]:
+        """
+        Returns expense totals grouped by category for the given date range.
+        """
+        rows = (
+            self._session.query(
+                Expense.category,
+                func.sum(Expense.amount).label("cat_total"),
+            )
+            .filter(
+                Expense.created_at >= start,
+                Expense.created_at <= end,
+            )
+            .group_by(Expense.category)
+            .all()
+        )
+        return [
+            ExpenseCategoryItem(
+                category=r.category or "عام خرچہ",
+                total=Decimal(str(r.cat_total or 0)),
+            )
+            for r in rows
+        ]

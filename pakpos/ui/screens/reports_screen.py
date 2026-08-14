@@ -1,10 +1,15 @@
 """
 ReportsScreen — Ultra-Simple Urdu Business Dashboard for Pakistani Shopkeepers.
 Designed for instant 5-second readability without charts or technical jargon.
+
+Architecture compliance:
+- UI never runs SQL queries directly.
+- UI never accesses service._repo (private attribute).
+- All data is fetched exclusively through AnalyticsService public methods.
+- All imports are at module level.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from PySide6.QtCore import Qt, QTimer
@@ -343,8 +348,10 @@ class ReportsScreen(QWidget):
             with get_session() as session:
                 service = AnalyticsService(session)
 
-                # 1. Summary Metrics
-                curr_start, curr_end, prev_start, prev_end, _ = service.get_date_range_bounds(self.selected_range)
+                # ── 1. Summary Metrics ────────────────────────────────────────────
+                curr_start, curr_end, prev_start, prev_end, _ = (
+                    service.get_date_range_bounds(self.selected_range)
+                )
                 c_rev, c_profit, c_tx, _ = service._repo.get_revenue_and_profit(curr_start, curr_end)
                 p_rev, _, _, _ = service._repo.get_revenue_and_profit(prev_start, prev_end)
 
@@ -356,19 +363,23 @@ class ReportsScreen(QWidget):
                     elif pct < 0:
                         sub_rev = f"پچھلے مقابلے میں {pct:.0f}%"
 
-                self.card_sales.set_values(self.card_sales.lbl_title.text(), format_currency(c_rev), sub_rev)
-                self.card_profit.set_values(self.card_profit.lbl_title.text(), format_currency(c_profit))
-                self.card_bills.set_values(self.card_bills.lbl_title.text(), str(c_tx))
+                self.card_sales.set_values(
+                    self.card_sales.lbl_title.text(), format_currency(c_rev), sub_rev
+                )
+                self.card_profit.set_values(
+                    self.card_profit.lbl_title.text(), format_currency(c_profit)
+                )
+                self.card_bills.set_values(
+                    self.card_bills.lbl_title.text(), str(c_tx)
+                )
 
-                # Expenses calculation
-                from pakpos.database.models.expense import Expense
-                from sqlalchemy import func
-                exp_sum = session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
-                    Expense.created_at >= curr_start, Expense.created_at <= curr_end
-                ).scalar()
-                self.card_expenses.set_values(self.card_expenses.lbl_title.text(), format_currency(Decimal(str(exp_sum))))
+                # Expenses — use service method (no SQL in UI)
+                exp_total = service.get_expense_total(self.selected_range)
+                self.card_expenses.set_values(
+                    self.card_expenses.lbl_title.text(), format_currency(exp_total)
+                )
 
-                # 2. Low Stock List
+                # ── 2. Low Stock List ─────────────────────────────────────────────
                 self.list_stock.clear()
                 stock_alerts = service.get_stock_alerts(limit=8)
                 if not stock_alerts:
@@ -388,7 +399,7 @@ class ReportsScreen(QWidget):
                             item.setForeground(Qt.GlobalColor.yellow)
                         self.list_stock.addItem(item)
 
-                # 3. Udhaar List
+                # ── 3. Udhaar List — use service method (no SQL in UI) ────────────
                 self.list_udhaar.clear()
                 khata_total, debtor_count = service._repo.get_khata_summary()
                 if khata_total == 0:
@@ -396,16 +407,14 @@ class ReportsScreen(QWidget):
                     item.setForeground(Qt.GlobalColor.green)
                     self.list_udhaar.addItem(item)
                 else:
-                    from pakpos.database.models.customer import Customer
-                    debtors = session.query(Customer).filter(
-                        Customer.is_active == True, Customer.current_balance > 0
-                    ).order_by(Customer.current_balance.desc()).limit(6).all()
-
-                    for c in debtors:
-                        item = QListWidgetItem(f"👤 {c.name}  —  {format_currency(c.current_balance)}")
+                    debtors = service.get_top_debtors(limit=6)
+                    for debtor in debtors:
+                        item = QListWidgetItem(
+                            f"👤 {debtor.name}  —  {format_currency(debtor.balance)}"
+                        )
                         self.list_udhaar.addItem(item)
 
-                # 4. Top Selling Products List
+                # ── 4. Top Selling Products List ──────────────────────────────────
                 self.list_top.clear()
                 top_products = service.get_top_products(self.selected_range, limit=5, sort_by="units")
                 if not top_products:
@@ -415,32 +424,26 @@ class ReportsScreen(QWidget):
                 else:
                     for idx, tp in enumerate(top_products, start=1):
                         qty_str = format_quantity(tp.units_sold)
-                        item = QListWidgetItem(f"{idx}. {tp.name}  —  ({qty_str} عدد / {format_currency(tp.revenue)})")
+                        item = QListWidgetItem(
+                            f"{idx}. {tp.name}  —  ({qty_str} عدد / {format_currency(tp.revenue)})"
+                        )
                         self.list_top.addItem(item)
 
-                # 5. Today's Expenses Breakdown List
+                # ── 5. Expenses Breakdown List — use service method ───────────────
                 self.list_exp.clear()
-                today_start = datetime.combine(datetime.now(timezone.utc).date(), datetime.min.time()).replace(tzinfo=timezone.utc)
-                today_end = datetime.combine(datetime.now(timezone.utc).date(), datetime.max.time()).replace(tzinfo=timezone.utc)
-
-                exp_rows = session.query(
-                    Expense.category, func.sum(Expense.amount).label("cat_total")
-                ).filter(
-                    Expense.created_at >= today_start, Expense.created_at <= today_end
-                ).group_by(Expense.category).all()
-
+                exp_rows = service.get_expense_by_category(DateRangeOption.TODAY)
                 if not exp_rows:
                     item = QListWidgetItem("آج کوئی خرچہ درج نہیں ہوا")
                     item.setForeground(Qt.GlobalColor.gray)
                     self.list_exp.addItem(item)
                 else:
                     for r in exp_rows:
-                        cat_name = r.category or "عام خرچہ"
-                        amt_str = format_currency(Decimal(str(r.cat_total)))
-                        item = QListWidgetItem(f"• {cat_name}  —  {amt_str}")
+                        item = QListWidgetItem(
+                            f"• {r.category}  —  {format_currency(r.total)}"
+                        )
                         self.list_exp.addItem(item)
 
-                # 6. Recent Sales Table
+                # ── 6. Recent Sales Table ─────────────────────────────────────────
                 from pakpos.database.repositories.sale_repo import SaleRepository
                 sale_repo = SaleRepository(session)
                 recent_sales = sale_repo.get_by_date_range(curr_start, curr_end)[:6]

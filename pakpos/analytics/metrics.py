@@ -105,6 +105,21 @@ class PeriodComparison:
 
 
 @dataclass
+class DebtorItem:
+    """A customer who has an outstanding credit balance (ادھار)."""
+    customer_id: int
+    name: str
+    balance: Decimal
+
+
+@dataclass
+class ExpenseCategoryItem:
+    """Total expenses grouped by category for the expense breakdown list."""
+    category: str
+    total: Decimal
+
+
+@dataclass
 class BusinessInsight:
     category: str  # "sales", "inventory", "khata", "margin", "trend"
     message: str

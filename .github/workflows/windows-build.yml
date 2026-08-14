@@ -10,11 +10,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-
 jobs:
   build:
     name: Build & Test Windows Executable
     runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Code
@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
 
@@ -35,6 +35,8 @@ jobs:
           uv sync --frozen
 
       - name: Run Pytest Suite
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           uv run pytest tests/ -v
 
@@ -42,16 +44,13 @@ jobs:
         run: |
           uv run pyinstaller pakpos.spec
 
-      - name: Install Inno Setup
-        # Chocolatey is pre-installed on all GitHub-hosted Windows runners.
-        # Installing explicitly makes the build deterministic regardless of
-        # what the runner image happens to pre-install in the future.
-        run: choco install innosetup -y
+      - name: Setup Inno Setup
+        uses: DisruptionNetworkLab/setup-innosetup@v3
 
       - name: Compile Inno Setup Installer
         shell: cmd
         run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\pakpos.iss
+          iscc installer\pakpos.iss
 
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4

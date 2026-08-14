@@ -38,6 +38,8 @@ def test_product_card_out_of_stock_display(qapp):
     assert card_out.is_out_of_stock
 
 
+from unittest.mock import patch
+
 def test_cart_widget_stock_limit_guard(qapp):
     cart = CartWidget()
     # Mock product stock cache
@@ -57,7 +59,9 @@ def test_cart_widget_stock_limit_guard(qapp):
     assert cart.get_items()[0].quantity == Decimal("3")
 
     # Attempting to add 5 more (total 8 > max 5) should clamp to max stock 5
-    cart.add_item(CartItem(product_id=100, product_name="Limited Item", barcode="123456", quantity=Decimal("5"), unit_price=Decimal("100")))
+    with patch("pakpos.ui.widgets.cart_widget.QMessageBox.warning") as mock_warn:
+        cart.add_item(CartItem(product_id=100, product_name="Limited Item", barcode="123456", quantity=Decimal("5"), unit_price=Decimal("100")))
+        mock_warn.assert_called_once()
     assert cart.get_items()[0].quantity == Decimal("5")
 
 

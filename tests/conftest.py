@@ -21,6 +21,17 @@ from pakpos.database.models.user import UserRole
 from pakpos.services.auth_service import AuthService
 
 
+@pytest.fixture(autouse=True)
+def prevent_modal_dialog_hang(monkeypatch):
+    """Safety net: auto-mock QMessageBox modal dialogs so they never block execution in headless CI."""
+    from unittest.mock import MagicMock
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox, "warning", MagicMock(return_value=QMessageBox.StandardButton.Ok))
+    monkeypatch.setattr(QMessageBox, "critical", MagicMock(return_value=QMessageBox.StandardButton.Ok))
+    monkeypatch.setattr(QMessageBox, "information", MagicMock(return_value=QMessageBox.StandardButton.Ok))
+    monkeypatch.setattr(QMessageBox, "question", MagicMock(return_value=QMessageBox.StandardButton.Yes))
+
+
 @pytest.fixture(scope="function")
 def db_engine():
     """Create a fresh in-memory SQLite engine for each test."""

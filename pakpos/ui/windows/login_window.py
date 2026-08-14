@@ -97,6 +97,12 @@ class LoginWindow(QMainWindow):
                     return
 
                 logger.info("User '%s' authenticated successfully (role=%s).", user.username, user.role)
+                session.expunge(user)
+
+            # Safely clear text input focus to prevent Wayland zwp_text_input_v3 segfault on Linux
+            self.input_username.clearFocus()
+            self.input_password.clearFocus()
+            self.clearFocus()
 
             # Open Main Window and prevent GC of window reference
             from pakpos.ui.windows.main_window import MainWindow
@@ -108,6 +114,7 @@ class LoginWindow(QMainWindow):
                 app._main_window = main_window
 
             main_window.show()
+            self.hide()
             self.close()
 
         except Exception as e:
